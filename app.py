@@ -1,23 +1,23 @@
 import os
 import sys
 import re
-import csv
+import argparse
+import importlib.util
 import tempfile
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from typing import List, Dict, Tuple, Optional
 
-try:
+HAS_PYMUPDF = importlib.util.find_spec("fitz") is not None
+if HAS_PYMUPDF:
     import fitz  # PyMuPDF for high-res PDF rendering and text extraction
-    HAS_PYMUPDF = True
-except ImportError:
-    HAS_PYMUPDF = False
 
-try:
+HAS_WIN32COM = (
+    importlib.util.find_spec("win32com") is not None
+    and importlib.util.find_spec("win32com.client") is not None
+)
+if HAS_WIN32COM:
     import win32com.client  # Windows COM Automation for CorelDRAW X7
-    HAS_WIN32COM = True
-except ImportError:
-    HAS_WIN32COM = False
 
 
 class AutoCoverEngine:
@@ -48,7 +48,23 @@ class AutoCoverEngine:
 
     def calculate_layout(self) -> Dict[str, float]:
         """Calculates centered layout bounds on A3+ paper (297 x 430 mm)."""
+        if self.cover_w <= 0 or self.cover_h <= 0:
+            raise ValueError("Ukuran cover harus lebih besar dari 0 mm.")
+        if self.spine_width < 0 or self.gap_width < 0:
+            raise ValueError("Tebal punggung dan gap tidak boleh bernilai negatif.")
+
         total_layout_w = self.spine_width + self.gap_width + self.cover_w
+        if total_layout_w > self.PAGE_A3_PLUS_W:
+            raise ValueError(
+                f"Total lebar layout ({total_layout_w:.1f} mm) melebihi lebar A3+ "
+                f"({self.PAGE_A3_PLUS_W:.1f} mm)."
+            )
+        if self.cover_h > self.PAGE_A3_PLUS_H:
+            raise ValueError(
+                f"Tinggi cover ({self.cover_h:.1f} mm) melebihi tinggi A3+ "
+                f"({self.PAGE_A3_PLUS_H:.1f} mm)."
+            )
+
         left_margin = (self.PAGE_A3_PLUS_W - total_layout_w) / 2.0
         top_margin = (self.PAGE_A3_PLUS_H - self.cover_h) / 2.0
 
@@ -70,8 +86,9 @@ class AutoCoverEngine:
     @staticmethod
     def extract_spine_components(pdf_path: str) -> Dict[str, str]:
         filename = os.path.splitext(os.path.basename(pdf_path))[0]
-        clean_fn = re.sub(r'[^a-zA-Z0-9_\- ]', '', filename).replace("_", " ").strip().upper()
-        
+        normalized_filename = filename.replace("_", " ")
+        clean_fn = re.sub(r'[^a-zA-Z0-9_\- ]', '', normalized_filename).strip().upper()
+
         # Default smart parsing from filename
         default_author = "NAMA PENULIS"
         default_title = clean_fn if clean_fn else "JUDUL SKRIPSI"
@@ -94,12 +111,12 @@ class AutoCoverEngine:
             return data
 
         try:
-            doc = fitz.open(pdf_path)
-            if len(doc) == 0:
-                return data
-            
-            page = doc[0]
-            text = page.get_text("text")
+            with fitz.open(pdf_path) as doc:
+                if len(doc) == 0:
+                    return data
+
+                page = doc[0]
+                text = page.get_text("text")
             lines = [line.strip() for line in text.split("\n") if line.strip()]
 
             if not lines:
@@ -164,14 +181,15 @@ class AutoCoverEngine:
         if not HAS_PYMUPDF:
             return None
         try:
-            doc = fitz.open(pdf_path)
-            if len(doc) == 0:
-                return None
-            page = doc[0]
-            pix = page.get_pixmap(dpi=300)
-            
+            with fitz.open(pdf_path) as doc:
+                if len(doc) == 0:
+                    return None
+                page = doc[0]
+                pix = page.get_pixmap(dpi=300)
+
             temp_dir = tempfile.gettempdir()
-            out_img = os.path.join(temp_dir, f"cover_temp_{os.getpid()}_{os.path.basename(pdf_path)}.png")
+            safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", os.path.basename(pdf_path))
+            out_img = os.path.join(temp_dir, f"cover_temp_{os.getpid()}_{safe_name}.png")
             pix.save(out_img)
             return out_img
         except Exception as err:
@@ -285,33 +303,39 @@ class AutoCoverEngine:
         return True
 
 
-def run_cli_mode(pdf_paths: Optional[List[str]] = None):
+def collect_pdf_paths(input_paths: List[str]) -> List[str]:
+    """Expand file/folder inputs into a sorted list of PDF paths."""
+    pdf_paths: List[str] = []
+    for input_path in input_paths:
+        normalized = input_path.strip('"\'')
+        if os.path.isdir(normalized):
+            pdf_paths.extend(
+                os.path.join(normalized, f)
+                for f in sorted(os.listdir(normalized))
+                if f.lower().endswith(".pdf")
+            )
+        elif os.path.isfile(normalized) and normalized.lower().endswith(".pdf"):
+            pdf_paths.append(normalized)
+    return pdf_paths
+
+
+def run_cli_mode(pdf_paths: Optional[List[str]] = None, spine_width: Optional[float] = None, cover_preset: Optional[str] = None, automate: bool = True):
     """Run AutoCover Studio engine in headless Command Line Interface (CLI) mode."""
     print("=" * 65)
     print(" 📘 AutoCover Studio - Headless / CLI Batch Mode")
     print("=" * 65)
-    
+
     if not pdf_paths:
         cli_args = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
         if cli_args:
-            pdf_paths = cli_args
+            pdf_paths = collect_pdf_paths(cli_args)
         else:
             try:
                 input_path = input("\nMasukkan path file PDF atau folder PDF: ").strip('"\'')
             except (KeyboardInterrupt, EOFError):
                 print("\nProses dibatalkan.")
                 return
-
-            if os.path.isdir(input_path):
-                pdf_paths = [
-                    os.path.join(input_path, f) for f in os.listdir(input_path) 
-                    if f.lower().endswith(".pdf")
-                ]
-            elif os.path.isfile(input_path) and input_path.lower().endswith(".pdf"):
-                pdf_paths = [input_path]
-            else:
-                print("❌ Path tidak valid atau tidak ada file PDF ditemukan.")
-                return
+            pdf_paths = collect_pdf_paths([input_path])
 
     if not pdf_paths:
         print("❌ Tidak ada file PDF untuk diproses.")
@@ -319,17 +343,24 @@ def run_cli_mode(pdf_paths: Optional[List[str]] = None):
 
     print(f"\n[+] Ditemukan {len(pdf_paths)} file PDF.")
     
-    try:
-        spine_input = input("Masukkan Tebal Punggung / Spine (mm) [default: 12.0]: ").strip()
-        spine_w = float(spine_input) if spine_input else 12.0
-        
-        preset_choice = input("Pilih Preset Cover [1: A4, 2: B5 (Default), 3: A5]: ").strip()
-    except (KeyboardInterrupt, EOFError):
-        print("\nProses dibatalkan.")
-        return
+    if spine_width is None:
+        try:
+            spine_input = input("Masukkan Tebal Punggung / Spine (mm) [default: 12.0]: ").strip()
+            spine_w = float(spine_input) if spine_input else 12.0
+        except (KeyboardInterrupt, EOFError):
+            print("\nProses dibatalkan.")
+            return
+    else:
+        spine_w = spine_width
 
-    preset_map = {"1": "A4", "2": "B5", "3": "A5"}
-    cover_preset = preset_map.get(preset_choice, "B5")
+    if cover_preset is None:
+        try:
+            preset_choice = input("Pilih Preset Cover [1: A4, 2: B5 (Default), 3: A5]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nProses dibatalkan.")
+            return
+        preset_map = {"1": "A4", "2": "B5", "3": "A5"}
+        cover_preset = preset_map.get(preset_choice, "B5")
 
     engine = AutoCoverEngine(
         cover_size_type=cover_preset,
@@ -346,7 +377,7 @@ def run_cli_mode(pdf_paths: Optional[List[str]] = None):
         print(f"   ├─ Penulis  : {meta['identitas'].replace(chr(10), ' | ')}")
         print(f"   └─ Tahun    : {meta['tahun']}\n")
 
-    if HAS_WIN32COM:
+    if automate and HAS_WIN32COM:
         try:
             print("🚀 Menjalankan Otomatisasi CorelDRAW...")
             engine.build_coreldraw_document(pdf_paths)
@@ -364,7 +395,7 @@ class AutoCoverAppGUI(tk.Tk):
         super().__init__()
 
         self.title("AutoCover Studio X7 - PDF Hardcover Generator")
-        self.geometry("880 x 720")
+        self.geometry("880x720")
         self.configure(bg="#0f172a")
 
         self.pdf_files: List[str] = []
@@ -465,10 +496,23 @@ class AutoCoverAppGUI(tk.Tk):
             messagebox.showerror("Error", str(e))
 
 
+def parse_args(argv: List[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="AutoCover Studio X7 - generator layout hardcover PDF.")
+    parser.add_argument("paths", nargs="*", help="File PDF atau folder berisi PDF.")
+    parser.add_argument("--cli", "-c", action="store_true", help="Jalankan mode command line.")
+    parser.add_argument("--spine", type=float, default=None, help="Tebal punggung buku dalam mm.")
+    parser.add_argument("--preset", choices=sorted(AutoCoverEngine.PRESETS), default=None, help="Preset ukuran cover depan.")
+    parser.add_argument("--no-corel", action="store_true", help="Hanya ekstrak metadata; jangan jalankan otomatisasi CorelDRAW.")
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
+    args = parse_args(sys.argv[1:])
+    pdf_paths = collect_pdf_paths(args.paths) if args.paths else None
+
     # Cek apakah flag --cli digunakan atau jika berjalan di lingkungan tanpa layar ($DISPLAY)
-    if "--cli" in sys.argv or "-c" in sys.argv:
-        run_cli_mode()
+    if args.cli:
+        run_cli_mode(pdf_paths=pdf_paths, spine_width=args.spine, cover_preset=args.preset, automate=not args.no_corel)
     else:
         try:
             app = AutoCoverAppGUI()
@@ -478,6 +522,6 @@ if __name__ == "__main__":
             if "no display name" in err_str or "DISPLAY" in err_str or "couldn't connect to display" in err_str:
                 print("\n⚠️ Lingkungan tanpa Layar/GUI terdeteksi (Tidak ada $DISPLAY).")
                 print("🔄 Beralih otomatis ke Mode Command Line (CLI)...\n")
-                run_cli_mode()
+                run_cli_mode(pdf_paths=pdf_paths, spine_width=args.spine, cover_preset=args.preset, automate=not args.no_corel)
             else:
                 raise err
