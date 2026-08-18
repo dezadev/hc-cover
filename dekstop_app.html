@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoCover Studio X7 - Layout Generator Hardcover</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PDF.js library for in-browser PDF rendering & text extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        .canvas-container {
+            background-image: radial-gradient(#334155 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col overflow-hidden font-sans antialiased">
+
+    <header class="h-14 bg-slate-800 border-b border-slate-700 px-4 flex items-center justify-between shrink-0 shadow-md">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white w-9 h-9 rounded-lg flex items-center justify-center font-bold shadow-lg shadow-indigo-500/30">
+                <i class="fa-solid fa-book-open text-lg"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-slate-100 text-base leading-tight flex items-center gap-2">
+                    AutoCover Studio X7
+                    <span class="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">Lossless Export & Rotasi 270°</span>
+                </h1>
+                <p class="text-xs text-slate-400">Punggung Rotasi 270° | Auto-Parsing Judul PDF | Ekspor SVG Embed Gambar & PNG Lossless</p>
+            </div>
+        </div>
+
+        <!-- Action Header Buttons -->
+        <div class="flex items-center gap-2">
+            <button id="btnExportPNGLayout" onclick="exportPNGLayout()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-image"></i> Export PNG Cetak (Lossless)
+            </button>
+            <button id="btnExportBatchSVG" onclick="exportBatchSVG()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-file-code"></i> Export SVG (Embed Cover)
+            </button>
+            <button id="btnExportCSV" onclick="exportCSVData()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-file-csv text-amber-400"></i> CSV Print Merge
+            </button>
+            <button id="btnExportVBA" onclick="copyVBACode()" class="bg-amber-600 hover:bg-amber-500 text-white text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-code"></i> Salin VBA Macro
+            </button>
+            <button id="btnExportPython" onclick="copyPythonCode()" class="bg-sky-600 hover:bg-sky-500 text-white text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
+                <i class="fa-brands fa-python"></i> Script Python
+            </button>
+        </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- Left Control Sidebar -->
+        <aside class="w-80 bg-slate-800 border-r border-slate-700 flex flex-col shrink-0 overflow-y-auto">
+            
+            <!-- Section 1: File Batch Loader -->
+            <div class="p-4 border-b border-slate-700">
+                <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-file-pdf text-rose-400"></i> File PDF Cover Batch
+                </h2>
+                
+                <label id="dropZone" class="border-2 border-dashed border-slate-600 hover:border-indigo-500 bg-slate-900/50 hover:bg-slate-900 rounded-xl p-3 flex flex-col items-center justify-center cursor-pointer transition group">
+                    <i class="fa-solid fa-cloud-arrow-up text-xl text-slate-400 group-hover:text-indigo-400 mb-1 transition"></i>
+                    <span class="text-xs font-medium text-slate-300">Pilih / Unggah File PDF Cover</span>
+                    <span class="text-[10px] text-slate-500">Ekstraksi Judul & Penulis Otomatis</span>
+                    <input type="file" id="pdfInput" multiple accept="application/pdf" class="hidden" onchange="handleFileSelect(event)">
+                </label>
+
+                <!-- PDF File List Queue -->
+                <div id="fileQueue" class="mt-2 space-y-1.5 max-h-36 overflow-y-auto text-xs">
+                    <div class="text-center py-2 text-slate-500 italic text-[11px]">Belum ada file PDF diunggah</div>
+                </div>
+            </div>
+
+            <!-- Section 2: Preset Ukuran Cover Depan -->
+            <div class="p-4 border-b border-slate-700 space-y-3">
+                <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-ruler-combined text-indigo-400"></i> Ukuran Cover Depan
+                </h2>
+
+                <div>
+                    <label class="block text-xs text-slate-300 mb-1">Preset Cover</label>
+                    <select id="presetSelect" onchange="updateCoverPreset()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500">
+                        <option value="A4">A4 (210 x 297 mm)</option>
+                        <option value="B5" selected>B5 JIS (182 x 257 mm - Standard)</option>
+                        <option value="A5">A5 (148 x 210 mm)</option>
+                        <option value="CUSTOM">Custom Ukuran Manual (mm)</option>
+                    </select>
+                </div>
+
+                <div id="customSizeGroup" class="grid grid-cols-2 gap-2 hidden">
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">Lebar (mm)</label>
+                        <input type="number" id="coverWidthInput" value="182" min="50" max="500" onchange="renderCanvas()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">Tinggi (mm)</label>
+                        <input type="number" id="coverHeightInput" value="257" min="50" max="500" onchange="renderCanvas()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Setting Detail Format Punggung Buku -->
+            <div class="p-4 border-b border-slate-700 space-y-3">
+                <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-list-check text-amber-400"></i> Elemen Punggung (Rotasi 270°)
+                </h2>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs text-slate-300 mb-1">Tebal Punggung (mm)</label>
+                        <input type="number" id="spineWidthInput" value="12" min="2" max="100" step="0.5" onchange="renderCanvas()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 font-mono">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-300 mb-1">Gap / Paret (mm)</label>
+                        <input type="number" id="gapWidthInput" value="5" min="0" max="30" step="0.5" onchange="renderCanvas()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-indigo-500 font-mono">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] text-slate-400 mb-0.5">1. Jenis Karya Tulis</label>
+                    <input type="text" id="spineKatInput" value="SKRIPSI" oninput="saveCurrentInputs(); renderCanvas();" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs px-2.5 py-1 text-slate-200 focus:outline-none focus:border-indigo-500 font-semibold">
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-0.5">
+                        <label class="block text-[11px] text-slate-400">2. Judul Utama (Auto-Extracted)</label>
+                        <span class="text-[9px] text-indigo-400 italic"><i class="fa-solid fa-wand-magic-sparkles"></i> PDF Parsed</span>
+                    </div>
+                    <textarea id="spineJudulInput" rows="3" oninput="saveCurrentInputs(); renderCanvas();" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs px-2.5 py-1 text-slate-200 focus:outline-none focus:border-indigo-500 font-semibold"></textarea>
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-0.5">
+                        <label class="block text-[11px] text-slate-400">3. Nama Penulis (Auto-Extracted)</label>
+                        <span class="text-[9px] text-emerald-400 italic"><i class="fa-solid fa-user-check"></i> Author OK</span>
+                    </div>
+                    <textarea id="spinePenulisInput" rows="2" oninput="saveCurrentInputs(); renderCanvas();" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs px-2.5 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] text-slate-400 mb-0.5">4. Tahun Terbit / Lulus</label>
+                    <input type="text" id="spineTahunInput" value="2026" oninput="saveCurrentInputs(); renderCanvas();" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs px-2.5 py-1 text-slate-200 focus:outline-none focus:border-indigo-500 font-mono">
+                </div>
+            </div>
+
+            <!-- Section 4: Ringkasan -->
+            <div class="p-4 space-y-3">
+                <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-regular fa-copy text-cyan-400"></i> Ringkasan Layout A3+
+                </h2>
+
+                <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-700/60 text-xs space-y-1">
+                    <div class="flex justify-between text-slate-400">
+                        <span>Ukuran Lembar:</span>
+                        <span class="text-slate-200 font-medium">A3+ (297 x 430 mm)</span>
+                    </div>
+                    <div class="flex justify-between text-slate-400">
+                        <span>Total Lebar Cover:</span>
+                        <span id="totalWidthSummary" class="text-amber-300 font-mono font-medium">199.0 mm</span>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+
+        <main class="flex-1 flex flex-col bg-slate-950 overflow-hidden relative">
+
+            <!-- Sheet Navigation Toolbar -->
+            <div class="h-10 bg-slate-800/80 border-b border-slate-700/80 px-4 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-400">Daftar File PDF:</span>
+                    <div id="sheetTabs" class="flex gap-1 overflow-x-auto max-w-xl py-1">
+                        <button class="bg-indigo-600 text-white text-xs px-2.5 py-1 rounded font-medium shadow">File 1</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 text-xs">
+                    <button onclick="zoomCanvas(0.1)" class="text-slate-400 hover:text-white"><i class="fa-solid fa-magnifying-glass-plus"></i> Zoom In</button>
+                    <button onclick="zoomCanvas(-0.1)" class="text-slate-400 hover:text-white"><i class="fa-solid fa-magnifying-glass-minus"></i> Zoom Out</button>
+                    <button onclick="resetZoom()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-rotate"></i> Reset</button>
+                </div>
+            </div>
+
+            <!-- Canvas Display Container -->
+            <div class="flex-1 canvas-container flex items-center justify-center p-6 overflow-auto relative" id="canvasScrollArea">
+                <div id="canvasWrapper" class="relative transition-transform duration-75 shadow-2xl rounded-sm bg-white" style="transform: scale(1); transform-origin: center center;">
+                    <canvas id="layoutCanvas" class="block border border-slate-300 shadow-xl"></canvas>
+                </div>
+            </div>
+
+            <!-- Status Bottom Bar -->
+            <footer class="h-7 bg-slate-900 border-t border-slate-800 px-4 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
+                <div class="flex items-center gap-4">
+                    <span><i class="fa-solid fa-circle text-[8px] text-emerald-500 mr-1"></i> Mode: Rotasi Punggung 270° & Export Cover Lossless</span>
+                    <span>Lembar Kerja: 297 mm x 430 mm (A3+)</span>
+                </div>
+                <div>CorelDRAW X7 & Print Merge Ready</div>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+        // Global State Variables
+        let pdfBatch = [];
+        let currentSheetIndex = 0;
+        let zoomLevel = 1.0;
+
+        // Dimensions (in mm)
+        const A3PlusW = 297.0;
+        const A3PlusH = 430.0;
+        const ScaleFactor = 3.0; // Resolution scaling for canvas
+
+        const canvas = document.getElementById('layoutCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const presets = {
+            'A4': { w: 210, h: 297 },
+            'B5': { w: 182, h: 257 },
+            'A5': { w: 148, h: 210 }
+        };
+
+        window.onload = function() {
+            initCanvas();
+            renderCanvas();
+        };
+
+        function initCanvas() {
+            canvas.width = A3PlusW * ScaleFactor;
+            canvas.height = A3PlusH * ScaleFactor;
+        }
+
+        function updateCoverPreset() {
+            const presetVal = document.getElementById('presetSelect').value;
+            const customGroup = document.getElementById('customSizeGroup');
+
+            if (presetVal === 'CUSTOM') {
+                customGroup.classList.remove('hidden');
+            } else {
+                customGroup.classList.add('hidden');
+                document.getElementById('coverWidthInput').value = presets[presetVal].w;
+                document.getElementById('coverHeightInput').value = presets[presetVal].h;
+            }
+            renderCanvas();
+        }
+
+        function getDimensions() {
+            const coverW = parseFloat(document.getElementById('coverWidthInput').value) || 182;
+            const coverH = parseFloat(document.getElementById('coverHeightInput').value) || 257;
+            const spineW = parseFloat(document.getElementById('spineWidthInput').value) || 12;
+            const gapW = parseFloat(document.getElementById('gapWidthInput').value) || 5;
+
+            const spineKat = document.getElementById('spineKatInput').value || 'SKRIPSI';
+            const spineJudul = document.getElementById('spineJudulInput').value || 'JUDUL SKRIPSI';
+            const spinePenulis = document.getElementById('spinePenulisInput').value || 'NAMA PENULIS';
+            const spineTahun = document.getElementById('spineTahunInput').value || '2026';
+
+            const totalLayoutW = spineW + gapW + coverW;
+            const leftMargin = (A3PlusW - totalLayoutW) / 2;
+            const topMargin = (A3PlusH - coverH) / 2;
+
+            document.getElementById('totalWidthSummary').innerText = `${totalLayoutW.toFixed(1)} mm`;
+
+            return { coverW, coverH, spineW, gapW, spineKat, spineJudul, spinePenulis, spineTahun, totalLayoutW, leftMargin, topMargin };
+        }
+
+        function saveCurrentInputs() {
+            if (pdfBatch[currentSheetIndex]) {
+                pdfBatch[currentSheetIndex].metadata = {
+                    kategori: document.getElementById('spineKatInput').value,
+                    judul: document.getElementById('spineJudulInput').value,
+                    penulis: document.getElementById('spinePenulisInput').value,
+                    tahun: document.getElementById('spineTahunInput').value
+                };
+            }
+        }
+
+        function renderCanvas() {
+            const dim = getDimensions();
+
+            // Background paper
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Outer border
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+
+            const mmToPx = (mm) => mm * ScaleFactor;
+
+            const spineX = mmToPx(dim.leftMargin);
+            const spineW = mmToPx(dim.spineW);
+            const gapX = spineX + spineW;
+            const gapW = mmToPx(dim.gapW);
+            const coverX = gapX + gapW;
+            const coverW = mmToPx(dim.coverW);
+            const coverH = mmToPx(dim.coverH);
+            const startY = mmToPx(dim.topMargin);
+
+            // 1. Draw Front Cover Image (Rendered PDF Page 1)
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(coverX, startY, coverW, coverH);
+
+            if (pdfBatch[currentSheetIndex] && pdfBatch[currentSheetIndex].previewImg) {
+                ctx.drawImage(pdfBatch[currentSheetIndex].previewImg, coverX, startY, coverW, coverH);
+            } else {
+                ctx.fillStyle = '#64748b';
+                ctx.font = 'bold 20px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('COVER DEPAN (PDF RENDERED)', coverX + (coverW / 2), startY + (coverH / 2) - 10);
+                ctx.font = '14px sans-serif';
+                ctx.fillText(`${dim.coverW} mm x ${dim.coverH} mm`, coverX + (coverW / 2), startY + (coverH / 2) + 20);
+            }
+
+            // Outline around Front Cover
+            ctx.strokeStyle = '#0284c7';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(coverX, startY, coverW, coverH);
+
+            // 2. Draw Gap Area (5mm)
+            ctx.fillStyle = '#f1f5f9';
+            ctx.fillRect(gapX, startY, gapW, coverH);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.setLineDash([4, 4]);
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(gapX, startY, gapW, coverH);
+            ctx.setLineDash([]);
+
+            // 3. Draw Spine Box
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(spineX, startY, spineW, coverH);
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(spineX, startY, spineW, coverH);
+
+            // 4. Render Spine Text Rotated 270 Degrees
+            ctx.save();
+            const spineCenterX = spineX + (spineW / 2);
+
+            // Spine Top Logo Placeholder
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.arc(spineCenterX, startY + mmToPx(15), Math.min(spineW / 2 - 2, 12), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('LOGO', spineCenterX, startY + mmToPx(15));
+
+            // ROTATE 270 DEGREES (Counter-clockwise -Math.PI / 2)
+            ctx.translate(spineCenterX, startY + (coverH / 2));
+            ctx.rotate(-Math.PI / 2); // 270 Degrees Rotation
+
+            const coverH_mm = dim.coverH;
+
+            // Kategori (Top section of spine)
+            ctx.fillStyle = '#0f172a';
+            ctx.font = 'bold 13px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(dim.spineKat.toUpperCase(), mmToPx(coverH_mm * 0.35), 0);
+
+            // Judul Utama (Upper-middle section)
+            ctx.font = 'bold 11px sans-serif';
+            const shortJudul = dim.spineJudul.length > 70 ? dim.spineJudul.substring(0, 67) + '...' : dim.spineJudul;
+            ctx.fillText(shortJudul.toUpperCase(), mmToPx(coverH_mm * 0.05), 0);
+
+            // Nama Penulis (Lower-middle section)
+            ctx.font = '10px sans-serif';
+            const linesPenulis = dim.spinePenulis.split('\n');
+            ctx.fillText(linesPenulis[0] || '', mmToPx(-coverH_mm * 0.25), -6);
+            if (linesPenulis[1]) ctx.fillText(linesPenulis[1], mmToPx(-coverH_mm * 0.25), 6);
+
+            // Tahun (Bottom section)
+            ctx.font = 'bold 13px sans-serif';
+            ctx.fillText(dim.spineTahun, mmToPx(-coverH_mm * 0.42), 0);
+
+            ctx.restore();
+
+            drawDimensionArrow(spineX, startY + coverH + 20, coverX + coverW, startY + coverH + 20, `Total Lebar Layout: ${dim.totalLayoutW.toFixed(1)} mm`);
+        }
+
+        function drawDimensionArrow(x1, y1, x2, y2, label) {
+            ctx.strokeStyle = '#475569';
+            ctx.fillStyle = '#475569';
+            ctx.lineWidth = 1.5;
+
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            ctx.font = 'bold 13px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, (x1 + x2) / 2, y1 + 18);
+        }
+
+        async function extractMetadataFromPDFPage(page, fileName) {
+            const cleanName = fileName.replace(/\.pdf$/i, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+            
+            // Default smart fallback from filename
+            let defaultAuthor = "NAMA PENULIS";
+            let defaultTitle = cleanName.toUpperCase();
+
+            // Parse filename if formatted like "Author Name - Title of Book"
+            if (cleanName.includes('-')) {
+                const parts = cleanName.split('-');
+                defaultAuthor = parts[0].trim().toUpperCase();
+                defaultTitle = parts.slice(1).join(' ').trim().toUpperCase();
+            } else if (cleanName.includes('_')) {
+                const parts = cleanName.split('_');
+                defaultAuthor = parts[0].trim().toUpperCase();
+                defaultTitle = parts.slice(1).join(' ').trim().toUpperCase();
+            }
+
+            let metadata = {
+                kategori: 'SKRIPSI',
+                judul: defaultTitle || 'JUDUL SKRIPSI',
+                penulis: defaultAuthor + '\nNIM: 00000000',
+                tahun: '2026'
+            };
+
+            try {
+                const textContent = await page.getTextContent();
+                const items = textContent.items;
+
+                if (!items || items.length === 0) {
+                    console.log(`PDF text empty or scanned PDF. Using filename fallback: ${fileName}`);
+                    return metadata;
+                }
+
+                // Group text items into lines based on Y coordinate position
+                const lineMap = {};
+                items.forEach(item => {
+                    const str = item.str ? item.str.trim() : '';
+                    if (!str) return;
+                    const y = Math.round(item.transform[5]); // Y coordinate
+                    if (!lineMap[y]) lineMap[y] = [];
+                    lineMap[y].push(str);
+                });
+
+                // Sort Y coordinates descending (top of page first)
+                const sortedY = Object.keys(lineMap).map(Number).sort((a, b) => b - a);
+                const lines = sortedY.map(y => lineMap[y].join(' ')).filter(l => l.length > 0);
+
+                if (lines.length === 0) return metadata;
+
+                const fullText = lines.join(' ');
+
+                // 1. Detect Year
+                const yearMatch = fullText.match(/\b(20\d{2})\b/);
+                if (yearMatch) metadata.tahun = yearMatch[1];
+
+                // 2. Detect Category
+                if (/TESIS/i.test(fullText)) metadata.kategori = 'TESIS';
+                else if (/DISERTASI/i.test(fullText)) metadata.kategori = 'DISERTASI';
+                else if (/LAPORAN/i.test(fullText)) metadata.kategori = 'LAPORAN TUGAS AKHIR';
+                else metadata.kategori = 'SKRIPSI';
+
+                // 3. Detect Author & NIM/NPM
+                let foundPenulis = [];
+                for (let i = 0; i < lines.length; i++) {
+                    const l = lines[i];
+                    if (/DISUSUN OLEH|OLEH\s*:/i.test(l)) {
+                        if (lines[i+1]) foundPenulis.push(lines[i+1].trim());
+                        if (lines[i+2] && (/\d+/.test(lines[i+2]) || /NIM|NPM|PROGRAM|ILMU/i.test(lines[i+2]))) {
+                            foundPenulis.push(lines[i+2].trim());
+                        }
+                        break;
+                    } else if (/\b(NIM|NPM)\b/i.test(l) || /^\d{8,12}$/.test(l)) {
+                        if (i > 0 && !foundPenulis.includes(lines[i-1])) foundPenulis.unshift(lines[i-1].trim());
+                        foundPenulis.push(l.trim());
+                        break;
+                    }
+                }
+
+                if (foundPenulis.length > 0) {
+                    metadata.penulis = foundPenulis.join('\n');
+                }
+
+                // 4. Detect Title Lines
+                const titleLines = lines.filter(l => {
+                    const u = l.toUpperCase();
+                    return l.length > 3 &&
+                        !u.includes('SKRIPSI') && !u.includes('TESIS') && !u.includes('DISERTASI') &&
+                        !u.includes('UNIVERSITAS') && !u.includes('FAKULTAS') && !u.includes('PROGRAM STUDI') &&
+                        !u.includes('DISUSUN OLEH') && !u.includes('OLEH') && !u.includes('NIM') && !u.includes('NPM') &&
+                        !/\b20\d{2}\b/.test(u);
+                });
+
+                if (titleLines.length > 0) {
+                    metadata.judul = titleLines.slice(0, 4).join(' ').toUpperCase();
+                }
+
+            } catch (err) {
+                console.warn('Ekstraksi PDF gagal, menggunakan nama file:', err);
+            }
+
+            return metadata;
+        }
+
+        async function handleFileSelect(event) {
+            const files = event.target.files;
+            if (!files.length) return;
+
+            const queueContainer = document.getElementById('fileQueue');
+            queueContainer.innerHTML = '';
+            pdfBatch = [];
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    const page = await pdf.getPage(1);
+                    
+                    const viewport = page.getViewport({ scale: 2.0 });
+                    const tempCanvas = document.createElement('canvas');
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCanvas.width = viewport.width;
+                    tempCanvas.height = viewport.height;
+
+                    await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
+                    
+                    const img = new Image();
+                    img.src = tempCanvas.toDataURL('image/png');
+                    await img.decode();
+
+                    const extractedMeta = await extractMetadataFromPDFPage(page, file.name);
+
+                    const fileObj = {
+                        name: file.name,
+                        file: file,
+                        previewImg: img,
+                        metadata: extractedMeta
+                    };
+
+                    pdfBatch.push(fileObj);
+
+                    const item = document.createElement('div');
+                    item.className = `p-1.5 rounded bg-slate-900 border ${i === 0 ? 'border-indigo-500 text-indigo-300' : 'border-slate-700 text-slate-300'} flex justify-between items-center cursor-pointer text-xs`;
+                    item.onclick = () => selectSheet(i);
+                    
+                    const firstAuthorLine = extractedMeta.penulis.split('\n')[0];
+                    item.innerHTML = `
+                        <div class="truncate max-w-[190px]">
+                            <div class="font-medium truncate"><i class="fa-solid fa-file-pdf text-rose-400 mr-1"></i> ${firstAuthorLine}</div>
+                            <div class="text-[10px] text-slate-500 truncate">${extractedMeta.judul}</div>
+                        </div>
+                        <span class="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-indigo-300">File ${i + 1}</span>
+                    `;
+                    queueContainer.appendChild(item);
+
+                } catch (e) {
+                    console.error("Gagal membaca PDF:", e);
+                }
+            }
+
+            renderSheetTabs();
+            if (pdfBatch.length > 0) {
+                selectSheet(0); // Immediately load and display File 1
+            }
+        }
+
+        function renderSheetTabs() {
+            const tabsContainer = document.getElementById('sheetTabs');
+            tabsContainer.innerHTML = '';
+
+            pdfBatch.forEach((fileObj, index) => {
+                const btn = document.createElement('button');
+                const authorShort = fileObj.metadata.penulis.split('\n')[0] || `File ${index+1}`;
+                btn.className = `text-xs px-2.5 py-1 rounded font-medium transition ${index === currentSheetIndex ? 'bg-indigo-600 text-white shadow' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`;
+                btn.innerText = `${index + 1}. ${authorShort.substring(0, 12)}...`;
+                btn.onclick = () => selectSheet(index);
+                tabsContainer.appendChild(btn);
+            });
+        }
+
+        function selectSheet(index) {
+            saveCurrentInputs();
+            currentSheetIndex = index;
+            
+            if (pdfBatch[index] && pdfBatch[index].metadata) {
+                const meta = pdfBatch[index].metadata;
+                document.getElementById('spineKatInput').value = meta.kategori;
+                document.getElementById('spineJudulInput').value = meta.judul;
+                document.getElementById('spinePenulisInput').value = meta.penulis;
+                document.getElementById('spineTahunInput').value = meta.tahun;
+            }
+
+            renderSheetTabs();
+            renderCanvas();
+        }
+
+        function zoomCanvas(delta) {
+            zoomLevel = Math.max(0.4, Math.min(2.5, zoomLevel + delta));
+            document.getElementById('canvasWrapper').style.transform = `scale(${zoomLevel})`;
+        }
+
+        function resetZoom() {
+            zoomLevel = 1.0;
+            document.getElementById('canvasWrapper').style.transform = `scale(1.0)`;
+        }
+
+        function showNotification(msg) {
+            const notification = document.createElement('div');
+            notification.className = 'fixed bottom-10 right-10 bg-indigo-600 text-white px-4 py-2.5 rounded-lg shadow-2xl text-xs font-semibold z-50 flex items-center gap-2 animate-bounce';
+            notification.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-300"></i> ${msg}`;
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 3500);
+        }
+
+        function exportPNGLayout() {
+            if (pdfBatch.length === 0) {
+                alert('Silakan unggah file PDF terlebih dahulu!');
+                return;
+            }
+
+            const currentObj = pdfBatch[currentSheetIndex];
+            const authorShort = currentObj.metadata.penulis.split('\n')[0] || `Layout_${currentSheetIndex + 1}`;
+            const cleanFileName = authorShort.replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_');
+
+            const link = document.createElement('a');
+            link.download = `Hardcover_Print_${cleanFileName}.png`;
+            link.href = canvas.toDataURL('image/png', 1.0);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showNotification(`Layout PNG Siap Cetak berhasil diunduh (${cleanFileName})`);
+        }
+
+        function exportCSVData() {
+            if (pdfBatch.length === 0) {
+                alert('Silakan unggah file PDF terlebih dahulu!');
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,Kategori,Judul,Penulis,Tahun\n";
+            pdfBatch.forEach(item => {
+                const m = item.metadata;
+                const kat = `"${m.kategori}"`;
+                const jud = `"${m.judul.replace(/"/g, '""').replace(/\n/g, ' ')}"`;
+                const pen = `"${m.penulis.replace(/"/g, '""').replace(/\n/g, ' - ')}"`;
+                const thn = `"${m.tahun}"`;
+                csvContent += `${kat},${jud},${pen},${thn}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "data_cover_print_merge.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showNotification("File CSV Print Merge berhasil dibuat!");
+        }
+
+        function generateSVGContentForIndex(index) {
+            const dim = getDimensions();
+            const item = pdfBatch[index];
+            const meta = item ? item.metadata : {
+                kategori: dim.spineKat,
+                judul: dim.spineJudul,
+                penulis: dim.spinePenulis,
+                tahun: dim.spineTahun
+            };
+
+            const spineCenterX = dim.leftMargin + (dim.spineW / 2);
+            const coverX = dim.leftMargin + dim.spineW + dim.gapW;
+
+            // Embedded Front Cover Image (fixes blank cover issue on export)
+            let imageTag = '';
+            if (item && item.previewImg && item.previewImg.src) {
+                imageTag = `<image href="${item.previewImg.src}" x="${coverX}" y="${dim.topMargin}" width="${dim.coverW}" height="${dim.coverH}" preserveAspectRatio="none"/>`;
+            }
+
+            return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${A3PlusW}mm" height="${A3PlusH}mm" viewBox="0 0 ${A3PlusW} ${A3PlusH}">
+    <!-- Background Paper A3+ -->
+    <rect x="0" y="0" width="${A3PlusW}" height="${A3PlusH}" fill="#ffffff" stroke="#cbd5e1" stroke-width="0.5"/>
+    
+    <!-- Spine Rect Box -->
+    <rect x="${dim.leftMargin}" y="${dim.topMargin}" width="${dim.spineW}" height="${dim.coverH}" fill="#ffffff" stroke="#000000" stroke-width="0.3"/>
+    
+    <!-- Spine Text Elements Rotated 270 Degrees -->
+    <text x="${spineCenterX}" y="${dim.topMargin + (dim.coverH * 0.15)}" font-family="Arial" font-size="3.5" font-weight="bold" text-anchor="middle" transform="rotate(270, ${spineCenterX}, ${dim.topMargin + (dim.coverH * 0.15)})">${meta.kategori}</text>
+    <text x="${spineCenterX}" y="${dim.topMargin + (dim.coverH * 0.45)}" font-family="Arial" font-size="3" font-weight="bold" text-anchor="middle" transform="rotate(270, ${spineCenterX}, ${dim.topMargin + (dim.coverH * 0.45)})">${meta.judul.replace(/\n/g, ' ')}</text>
+    <text x="${spineCenterX}" y="${dim.topMargin + (dim.coverH * 0.75)}" font-family="Arial" font-size="2.5" text-anchor="middle" transform="rotate(270, ${spineCenterX}, ${dim.topMargin + (dim.coverH * 0.75)})">${meta.penulis.replace(/\n/g, ' ')}</text>
+    <text x="${spineCenterX}" y="${dim.topMargin + dim.coverH - 15}" font-family="Arial" font-size="3.5" font-weight="bold" text-anchor="middle" transform="rotate(270, ${spineCenterX}, ${dim.topMargin + dim.coverH - 15})">${meta.tahun}</text>
+    
+    <!-- 5mm Gap Segment -->
+    <rect x="${dim.leftMargin + dim.spineW}" y="${dim.topMargin}" width="${dim.gapW}" height="${dim.coverH}" fill="#f1f5f9" stroke="#999999" stroke-width="0.2" stroke-dasharray="1,1"/>
+
+    <!-- Embedded Front Cover Image (Lossless PDF Render) -->
+    ${imageTag}
+    <rect x="${coverX}" y="${dim.topMargin}" width="${dim.coverW}" height="${dim.coverH}" fill="none" stroke="#000000" stroke-width="0.3"/>
+</svg>`;
+        }
+
+        function exportBatchSVG() {
+            if (pdfBatch.length === 0) {
+                alert('Silakan unggah minimal 1 file PDF cover terlebih dahulu!');
+                return;
+            }
+
+            pdfBatch.forEach((item, idx) => {
+                const svgData = generateSVGContentForIndex(idx);
+                const firstPenulisLine = item.metadata.penulis.split('\n')[0] || `Penulis_${idx+1}`;
+                const cleanFileName = firstPenulisLine.replace(/[^a-zA-Z0-9_\- ]/g, '').trim().replace(/\s+/g, '_');
+
+                const blob = new Blob([svgData], { type: 'image/svg+xml' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Hardcover_${cleanFileName}.svg`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+            showNotification("Ekspor SVG (termasuk Cover Depan) selesai!");
+        }
+
+        function copyVBACode() {
+            const dim = getDimensions();
+            const vbaScript = `' CorelDRAW X7 - Auto Multi-PDF Hardcover Macro (Spine 270 Degrees)
+Sub BatchGenerateHardcoverWithAuthorName()
+    Dim doc As Document: Set doc = CreateDocument()
+    doc.Unit = cdrMillimeter
+    doc.MasterPage.SetSize ${A3PlusW}, ${A3PlusH}
+    
+    Dim spineW As Double: spineW = ${dim.spineW}
+    Dim gapW As Double: gapW = ${dim.gapW}
+    Dim coverW As Double: coverW = ${dim.coverW}
+    Dim coverH As Double: coverH = ${dim.coverH}
+    
+    Dim leftM As Double: leftM = (${A3PlusW} - (spineW + gapW + coverW)) / 2
+    Dim topM As Double: topM = (${A3PlusH} - coverH) / 2
+    Dim spineCenterX As Double: spineCenterX = leftM + (spineW / 2)
+    Dim startY As Double: startY = ${A3PlusH} - topM
+    
+    ActiveLayer.CreateRectangle leftM, startY, leftM + spineW, startY - coverH
+    ActiveLayer.CreateLineSegment leftM + spineW + gapW, startY, leftM + spineW + gapW, startY - coverH
+    ActiveLayer.CreateRectangle leftM + spineW + gapW, startY, leftM + spineW + gapW + coverW, startY - coverH
+
+    ' Rotasi Text Punggung Tepat 270 Derajat
+    Dim txtKat As Shape, txtJudul As Shape, txtPenulis As Shape, txtTahun As Shape
+    Set txtKat = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.15), "${dim.spineKat}", , , "Arial", 10): txtKat.Text.Angle = 270
+    Set txtJudul = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.45), "${dim.spineJudul.replace(/\n/g, ' ')}", , , "Arial", 9): txtJudul.Text.Angle = 270
+    Set txtPenulis = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.75), "${dim.spinePenulis.replace(/\n/g, ' ')}", , , "Arial", 8): txtPenulis.Text.Angle = 270
+    Set txtTahun = ActiveLayer.CreateArtisticText(spineCenterX, startY - coverH + 12, "${dim.spineTahun}", , , "Arial", 10): txtTahun.Text.Angle = 270
+End Sub`;
+
+            const textarea = document.createElement('textarea');
+            textarea.value = vbaScript;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showNotification("Kode VBA Macro CorelDRAW X7 berhasil disalin!");
+        }
+
+        function copyPythonCode() {
+            const dim = getDimensions();
+            const pythonScript = `# AutoCover Studio X7 - Python Batch Automation (Spine Rotated 270°)
+import win32com.client
+
+corel = win32com.client.Dispatch("CorelDRAW.Application.17")
+corel.Visible = True
+
+doc = corel.CreateDocument()
+doc.Unit = 4 # Millimeters
+doc.MasterPage.SetSize(297.0, 430.0)
+
+spine_w = ${dim.spineW}
+gap_w = ${dim.gapW}
+cover_w = ${dim.coverW}
+cover_h = ${dim.coverH}
+
+left_m = (297.0 - (spine_w + gap_w + cover_w)) / 2.0
+top_m = (430.0 - cover_h) / 2.0
+start_y = 430.0 - top_m
+spine_center_x = left_m + (spine_w / 2.0)
+
+layer = doc.Pages(1).ActiveLayer
+layer.CreateRectangle(left_m, start_y, left_m + spine_w, start_y - cover_h)
+layer.CreateLineSegment(left_m + spine_w + gap_w, start_y, left_m + spine_w + gap_w, start_y - cover_h)
+
+# Rotasi Text Punggung Tepat 270 Derajat
+kat_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.15), "${dim.spineKat}", 0, 0, "Arial", 10)
+kat_txt.Text.Angle = 270.0
+
+judul_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.45), "${dim.spineJudul.replace(/\n/g, ' ')}", 0, 0, "Arial", 9)
+judul_txt.Text.Angle = 270.0
+
+id_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.75), "${dim.spinePenulis.replace(/\n/g, ' ')}", 0, 0, "Arial", 8)
+id_txt.Text.Angle = 270.0
+
+thn_txt = layer.CreateArtisticText(spine_center_x, start_y - cover_h + 12.0, "${dim.spineTahun}", 0, 0, "Arial", 10)
+thn_txt.Text.Angle = 270.0`;
+
+            const textarea = document.createElement('textarea');
+            textarea.value = pythonScript;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showNotification("Script Python 3.14 disalin!");
+        }
+    </script>
+</body>
+</html>
