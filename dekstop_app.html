@@ -36,7 +36,6 @@
                     AutoCover Studio X7
                     <span class="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">Lossless Export & Rotasi 270°</span>
                 </h1>
-                <p class="text-xs text-slate-400">Punggung menghadap cover utama | Auto-Parsing Judul/Penulis/Tahun PDF | Ekspor SVG CorelDRAW</p>
             </div>
         </div>
 
@@ -89,7 +88,7 @@
                     <label class="block text-xs text-slate-300 mb-1">Preset Cover</label>
                     <select id="presetSelect" onchange="updateCoverPreset()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500">
                         <option value="A4" selected>A4 (210 x 297 mm)</option>
-                        <option value="B5" >B5 JIS (182 x 257 mm - Standard)</option>
+                        <option value="B5">B5 JIS (182 x 257 mm - Standard)</option>
                         <option value="A5">A5 (148 x 210 mm)</option>
                         <option value="CUSTOM">Custom Ukuran Manual (mm)</option>
                     </select>
@@ -364,57 +363,129 @@
             ctx.lineWidth = 2;
             ctx.strokeRect(spineX, startY, spineW, coverH);
 
-            // 4. Render Spine Text (Masing-masing dirotasi agar menghadap Cover Depan)
+            // 4. Render Spine Text (Susun Kanan ke Kiri, Auto-Wrap & Auto-Scaling Anti Tumpang Tindih)
             ctx.save();
             const spineCenterX = spineX + (spineW / 2);
             const coverH_mm = dim.coverH;
             
-            // Pengaturan Font Global
             ctx.fillStyle = '#0f172a';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             const baseFont = 'bold "Times New Roman", serif';
 
-            // Fungsi Helper untuk merotasi individu di posisinya
-            // Menggunakan Math.PI / 2 (90 derajat di Canvas) agar teks dibaca dari atas ke bawah
-            // dan bagian atas huruf menghadap ke kanan (Cover Depan)
-            const drawRotatedText = (text, posX, posY, fontSize) => {
+            // Helper Rotasi Teks Tunggal + Dynamic Font Scaling
+            const drawRotatedTextScaled = (text, posX, posY, initialFontSize, maxPxLength) => {
                 ctx.save();
                 ctx.translate(posX, posY);
                 ctx.rotate(Math.PI / 2); 
-                ctx.font = `${fontSize}px ${baseFont}`;
+                
+                let currentFontSize = initialFontSize;
+                ctx.font = `${currentFontSize}px ${baseFont}`;
+                let textWidth = ctx.measureText(text).width;
+
+                while (textWidth > maxPxLength && currentFontSize > 7) {
+                    currentFontSize -= 0.5;
+                    ctx.font = `${currentFontSize}px ${baseFont}`;
+                    textWidth = ctx.measureText(text).width;
+                }
+
                 ctx.fillText(text, 0, 0);
                 ctx.restore();
             };
 
-            // 1. Logo (Paling atas)
-            const logoPosY = startY + mmToPx(coverH_mm * 0.07); 
+            // 1. Logo (Atas - Posisi 6%)
+            const logoPosY = startY + mmToPx(coverH_mm * 0.06); 
             ctx.beginPath();
-            ctx.arc(spineCenterX, logoPosY, Math.min(spineW / 2 - 2, 12), 0, Math.PI * 2);
+            ctx.arc(spineCenterX, logoPosY, Math.min(spineW / 2 - 2, 10), 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 10px "Times New Roman", serif';
+            ctx.font = 'bold 9px "Times New Roman", serif';
             ctx.fillText('LOGO', spineCenterX, logoPosY);
-            ctx.fillStyle = '#0f172a'; // Kembalikan warna text
+            ctx.fillStyle = '#0f172a';
 
-            // 2. Kategori / Karya Tulis
-            drawRotatedText(dim.spineKat.toUpperCase(), spineCenterX, startY + mmToPx(coverH_mm * 0.18), 14);
+            // 2. Kategori / Karya Tulis (Posisi 15%)
+            const katPosY = startY + mmToPx(coverH_mm * 0.15);
+            drawRotatedTextScaled(dim.spineKat.toUpperCase(), spineCenterX, katPosY, 13, mmToPx(coverH_mm * 0.12));
 
-            // 3. Judul Utama
-            const shortJudul = dim.spineJudul.length > 70 ? dim.spineJudul.substring(0, 67) + '...' : dim.spineJudul;
-            drawRotatedText(shortJudul.toUpperCase(), spineCenterX, startY + mmToPx(coverH_mm * 0.45), 12);
+            // 3. Judul Utama (Auto Wrap Word-Break & Disusun dari Kanan ke Kiri)
+            const judulPosY = startY + mmToPx(coverH_mm * 0.45);
+            const maxJudulLength = mmToPx(coverH_mm * 0.38);
+            const cleanJudul = dim.spineJudul.replace(/\n/g, ' ').toUpperCase();
 
-            // 4. Nama Penulis
-            const linesPenulis = dim.spinePenulis.split('\n');
-            if (linesPenulis[0]) {
-                drawRotatedText(linesPenulis[0], spineCenterX, startY + mmToPx(coverH_mm * 0.75) - 6, 11);
+            // Fungsi Pembagi Kalimat Judul ke Beberapa Baris
+            const wrapTextToLines = (text, initialFontSize, maxLength) => {
+                let fontSize = initialFontSize;
+                let lines = [];
+                
+                while (fontSize >= 8) {
+                    ctx.font = `${fontSize}px ${baseFont}`;
+                    const words = text.split(' ');
+                    lines = [];
+                    let currentLine = words[0] || '';
+
+                    for (let i = 1; i < words.length; i++) {
+                        const word = words[i];
+                        const testLine = currentLine + ' ' + word;
+                        if (ctx.measureText(testLine).width <= maxLength) {
+                            currentLine = testLine;
+                        } else {
+                            lines.push(currentLine);
+                            currentLine = word;
+                        }
+                    }
+                    lines.push(currentLine);
+
+                    if (lines.length <= 3) break; // Maksimal 3 baris
+                    fontSize -= 0.5;
+                }
+                return { lines, fontSize };
+            };
+
+            const { lines: judulLines, fontSize: judulFontSize } = wrapTextToLines(cleanJudul, 12, maxJudulLength);
+            const lineSpacing = judulFontSize * 1.25; 
+            const totalWidth = (judulLines.length - 1) * lineSpacing;
+            const startXOffset = - (totalWidth / 2);
+
+            // Render Baris Judul dari Kanan ke Kiri (Baris pertama paling kanan)
+            judulLines.forEach((line, index) => {
+                const reverseIndex = (judulLines.length - 1) - index;
+                const offsetX = spineCenterX + startXOffset + (reverseIndex * lineSpacing);
+                
+                ctx.save();
+                ctx.translate(offsetX, judulPosY);
+                ctx.rotate(Math.PI / 2);
+                ctx.font = `${judulFontSize}px ${baseFont}`;
+                ctx.fillText(line, 0, 0);
+                ctx.restore();
+            });
+
+            // 4. Nama Penulis & NIM (Auto Multi-Column Disusun dari Kanan ke Kiri)
+            const penulisPosY = startY + mmToPx(coverH_mm * 0.78);
+            const linesPenulis = dim.spinePenulis.split('\n').filter(line => line.trim() !== '');
+            const maxPenulisLength = mmToPx(coverH_mm * 0.18);
+
+            if (linesPenulis.length === 1) {
+                drawRotatedTextScaled(linesPenulis[0], spineCenterX, penulisPosY, 11, maxPenulisLength);
+            } else if (linesPenulis.length >= 2) {
+                const penFontSize = 10;
+                const penSpacing = penFontSize * 1.25;
+                const totalPenWidth = (linesPenulis.length - 1) * penSpacing;
+                const startXPen = - (totalPenWidth / 2);
+
+                linesPenulis.forEach((line, index) => {
+                    const reverseIndex = (linesPenulis.length - 1) - index;
+                    const offsetX = spineCenterX + startXPen + (reverseIndex * penSpacing);
+                    
+                    drawRotatedTextScaled(line, offsetX, penulisPosY, penFontSize, maxPenulisLength);
+                });
             }
-            if (linesPenulis[1]) {
-                drawRotatedText(linesPenulis[1], spineCenterX, startY + mmToPx(coverH_mm * 0.75) + 6, 11);
-            }
 
-            // 5. Tahun (Paling bawah)
-            drawRotatedText(dim.spineTahun, spineCenterX, startY + coverH - mmToPx(coverH_mm * 0.08), 14);
+            // 5. Tahun (Paling Bawah - Horizontal Tanpa Rotasi)
+            const tahunPosY = startY + coverH - mmToPx(coverH_mm * 0.06);
+            ctx.font = `13px ${baseFont}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(dim.spineTahun, spineCenterX, tahunPosY);
 
             ctx.restore();
 
@@ -792,16 +863,13 @@
             const gapX = dim.leftMargin + dim.spineW;
             const coverX = gapX + dim.gapW;
             const spineCenterX = spineX + (dim.spineW / 2);
-            const spineCenterY = dim.topMargin + (dim.coverH / 2);
             const penulisLines = String(meta.penulis || '').split('\n').filter(Boolean);
 
-            // SVG 1.1 + xlink improves compatibility with older CorelDRAW versions.
             let imageTag = `<rect x="${coverX}" y="${dim.topMargin}" width="${dim.coverW}" height="${dim.coverH}" fill="#f8fafc"/>`;
             if (item && item.previewImg && item.previewImg.src) {
                 imageTag = `<image xlink:href="${item.previewImg.src}" x="${coverX}" y="${dim.topMargin}" width="${dim.coverW}" height="${dim.coverH}" preserveAspectRatio="none"/>`;
             }
 
-            // Menggunakan transform rotate(90 x y) agar atas huruf menghadap kanan (cover depan)
             const textAtRotated = (x, y, text, size) =>
                 `<text x="${x}" y="${y}" font-family="'Times New Roman', Times, serif" font-size="${size}" font-weight="bold" font-style="italic" text-anchor="middle" dominant-baseline="middle" transform="rotate(90, ${x}, ${y})">${escapeHtml(text)}</text>`;
 
@@ -815,14 +883,14 @@
 
     <g>
         <!-- Logo SVG -->
-        <circle cx="${spineCenterX}" cy="${dim.topMargin + (dim.coverH * 0.07)}" r="${Math.min(dim.spineW/2 - 1, 4)}" fill="#0f172a" />
-        <text x="${spineCenterX}" y="${dim.topMargin + (dim.coverH * 0.07)}" font-family="'Times New Roman', Times, serif" font-size="3" font-weight="bold" font-style="italic" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">LOGO</text>
+        <circle cx="${spineCenterX}" cy="${dim.topMargin + (dim.coverH * 0.06)}" r="${Math.min(dim.spineW/2 - 1, 4)}" fill="#0f172a" />
+        <text x="${spineCenterX}" y="${dim.topMargin + (dim.coverH * 0.06)}" font-family="'Times New Roman', Times, serif" font-size="3" font-weight="bold" font-style="italic" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">LOGO</text>
         
-        <!-- Urutan Teks dengan Rotasi 90 Derajat (Atas huruf menghadap cover depan) -->
-        ${textAtRotated(spineCenterX, dim.topMargin + (dim.coverH * 0.18), String(meta.kategori || '').toUpperCase(), 4.5)}
+        <!-- Urutan Teks -->
+        ${textAtRotated(spineCenterX, dim.topMargin + (dim.coverH * 0.15), String(meta.kategori || '').toUpperCase(), 4.5)}
         ${textAtRotated(spineCenterX, dim.topMargin + (dim.coverH * 0.45), String(meta.judul || '').replace(/\n/g, ' ').toUpperCase(), 3.8)}
-        ${penulisLines.map((line, i) => textAtRotated(spineCenterX, dim.topMargin + (dim.coverH * 0.75) + ((i - ((penulisLines.length - 1) / 2)) * 4), line, 3.4)).join('\n        ')}
-        ${textAtRotated(spineCenterX, dim.topMargin + dim.coverH - (dim.coverH * 0.08), String(meta.tahun || ''), 4.5)}
+        ${penulisLines.map((line, i) => textAtRotated(spineCenterX, dim.topMargin + (dim.coverH * 0.78) + ((i - ((penulisLines.length - 1) / 2)) * 4), line, 3.4)).join('\n        ')}
+        <text x="${spineCenterX}" y="${dim.topMargin + dim.coverH - (dim.coverH * 0.06)}" font-family="'Times New Roman', Times, serif" font-size="4.5" font-weight="bold" fill="#0f172a" text-anchor="middle" dominant-baseline="middle">${escapeHtml(meta.tahun || '')}</text>
     </g>
 </svg>`;
         }
@@ -871,12 +939,12 @@ Sub BatchGenerateHardcoverWithAuthorName()
     ActiveLayer.CreateLineSegment leftM + spineW + gapW, startY, leftM + spineW + gapW, startY - coverH
     ActiveLayer.CreateRectangle leftM + spineW + gapW, startY, leftM + spineW + gapW + coverW, startY - coverH
 
-    ' Rotasi Text Punggung 270 Derajat Menghadap Cover Depan & Font Times New Roman Bold Italic (cdrTrue=1)
+    ' Rotasi Text Punggung 270 Derajat Menghadap Cover Depan & Font Times New Roman Bold Italic
     Dim txtKat As Shape, txtJudul As Shape, txtPenulis As Shape, txtTahun As Shape
-    Set txtKat = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.18), "${dim.spineKat}", , , "Times New Roman", 10, cdrTrue, cdrTrue): txtKat.Text.Angle = 270
+    Set txtKat = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.15), "${dim.spineKat}", , , "Times New Roman", 10, cdrTrue, cdrTrue): txtKat.Text.Angle = 270
     Set txtJudul = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.45), "${dim.spineJudul.replace(/\n/g, ' ')}", , , "Times New Roman", 9, cdrTrue, cdrTrue): txtJudul.Text.Angle = 270
-    Set txtPenulis = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.75), "${dim.spinePenulis.replace(/\n/g, ' ')}", , , "Times New Roman", 8, cdrTrue, cdrTrue): txtPenulis.Text.Angle = 270
-    Set txtTahun = ActiveLayer.CreateArtisticText(spineCenterX, startY - coverH + 12, "${dim.spineTahun}", , , "Times New Roman", 10, cdrTrue, cdrTrue): txtTahun.Text.Angle = 270
+    Set txtPenulis = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.78), "${dim.spinePenulis.replace(/\n/g, ' ')}", , , "Times New Roman", 8, cdrTrue, cdrTrue): txtPenulis.Text.Angle = 270
+    Set txtTahun = ActiveLayer.CreateArtisticText(spineCenterX, startY - coverH + 12, "${dim.spineTahun}", , , "Times New Roman", 10, cdrTrue, cdrFalse)
 End Sub`;
 
             const textarea = document.createElement('textarea');
@@ -914,18 +982,17 @@ layer = doc.Pages(1).ActiveLayer
 layer.CreateRectangle(left_m, start_y, left_m + spine_w, start_y - cover_h)
 layer.CreateLineSegment(left_m + spine_w + gap_w, start_y, left_m + spine_w + gap_w, start_y - cover_h)
 
-# Rotasi Text Punggung 270 Derajat Menghadap Cover Depan & Times New Roman Bold Italic (1=Bold, 1=Italic)
-kat_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.18), "${dim.spineKat}", 0, 0, "Times New Roman", 10, 1, 1)
+# Rotasi Text Punggung 270 Derajat Menghadap Cover Depan & Times New Roman Bold
+kat_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.15), "${dim.spineKat}", 0, 0, "Times New Roman", 10, 1, 1)
 kat_txt.Text.Angle = 270.0
 
 judul_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.45), "${dim.spineJudul.replace(/\n/g, ' ')}", 0, 0, "Times New Roman", 9, 1, 1)
 judul_txt.Text.Angle = 270.0
 
-id_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.75), "${dim.spinePenulis.replace(/\n/g, ' ')}", 0, 0, "Times New Roman", 8, 1, 1)
+id_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.78), "${dim.spinePenulis.replace(/\n/g, ' ')}", 0, 0, "Times New Roman", 8, 1, 1)
 id_txt.Text.Angle = 270.0
 
-thn_txt = layer.CreateArtisticText(spine_center_x, start_y - cover_h + 12.0, "${dim.spineTahun}", 0, 0, "Times New Roman", 10, 1, 1)
-thn_txt.Text.Angle = 270.0`;
+thn_txt = layer.CreateArtisticText(spine_center_x, start_y - cover_h + 12.0, "${dim.spineTahun}", 0, 0, "Times New Roman", 10, 1, 0)`;
 
             const textarea = document.createElement('textarea');
             textarea.value = pythonScript;
@@ -933,7 +1000,7 @@ thn_txt.Text.Angle = 270.0`;
             textarea.select();
             document.execCommand('copy');
             document.body.removeChild(textarea);
-            showNotification("Script Python 3.14 disalin!");
+            showNotification("Script Python disalin!");
         }
     </script>
 </body>
