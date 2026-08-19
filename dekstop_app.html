@@ -62,7 +62,6 @@
         <!-- Left Control Sidebar -->
         <aside class="w-80 bg-slate-800 border-r border-slate-700 flex flex-col shrink-0 overflow-y-auto">
             
-            <!-- Section 1: File Batch Loader -->
             <div class="p-4 border-b border-slate-700">
                 <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                     <i class="fa-solid fa-file-pdf text-rose-400"></i> File PDF Cover Batch
@@ -81,7 +80,6 @@
                 </div>
             </div>
 
-            <!-- Section 2: Preset Ukuran Cover Depan -->
             <div class="p-4 border-b border-slate-700 space-y-3">
                 <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                     <i class="fa-solid fa-ruler-combined text-indigo-400"></i> Ukuran Cover Depan
@@ -90,8 +88,8 @@
                 <div>
                     <label class="block text-xs text-slate-300 mb-1">Preset Cover</label>
                     <select id="presetSelect" onchange="updateCoverPreset()" class="w-full bg-slate-900 border border-slate-700 rounded-lg text-xs px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500">
-                        <option value="A4">A4 (210 x 297 mm)</option>
-                        <option value="B5" selected>B5 JIS (182 x 257 mm - Standard)</option>
+                        <option value="A4" selected>A4 (210 x 297 mm)</option>
+                        <option value="B5" >B5 JIS (182 x 257 mm - Standard)</option>
                         <option value="A5">A5 (148 x 210 mm)</option>
                         <option value="CUSTOM">Custom Ukuran Manual (mm)</option>
                     </select>
@@ -109,7 +107,6 @@
                 </div>
             </div>
 
-            <!-- Section 3: Setting Detail Format Punggung Buku -->
             <div class="p-4 border-b border-slate-700 space-y-3">
                 <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                     <i class="fa-solid fa-list-check text-amber-400"></i> Elemen Punggung (Rotasi 270°)
@@ -153,7 +150,6 @@
                 </div>
             </div>
 
-            <!-- Section 4: Ringkasan -->
             <div class="p-4 space-y-3">
                 <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                     <i class="fa-regular fa-copy text-cyan-400"></i> Ringkasan Layout A3+
@@ -349,10 +345,10 @@
                 ctx.drawImage(pdfBatch[currentSheetIndex].previewImg, coverX, startY, coverW, coverH);
             } else {
                 ctx.fillStyle = '#64748b';
-                ctx.font = 'bold 20px sans-serif';
+                ctx.font = 'bold 20px "Times New Roman"';
                 ctx.textAlign = 'center';
                 ctx.fillText('COVER DEPAN (PDF RENDERED)', coverX + (coverW / 2), startY + (coverH / 2) - 10);
-                ctx.font = '14px sans-serif';
+                ctx.font = '14px "Times New Roman"';
                 ctx.fillText(`${dim.coverW} mm x ${dim.coverH} mm`, coverX + (coverW / 2), startY + (coverH / 2) + 20);
             }
 
@@ -361,15 +357,6 @@
             ctx.lineWidth = 3;
             ctx.strokeRect(coverX, startY, coverW, coverH);
 
-            // 2. Draw Gap Area (5mm)
-            ctx.fillStyle = '#f1f5f9';
-            ctx.fillRect(gapX, startY, gapW, coverH);
-            ctx.strokeStyle = '#94a3b8';
-            ctx.setLineDash([4, 4]);
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(gapX, startY, gapW, coverH);
-            ctx.setLineDash([]);
-
             // 3. Draw Spine Box
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(spineX, startY, spineW, coverH);
@@ -377,48 +364,57 @@
             ctx.lineWidth = 2;
             ctx.strokeRect(spineX, startY, spineW, coverH);
 
-            // 4. Render Spine Text Rotated 270 Degrees
+            // 4. Render Spine Text (Masing-masing dirotasi agar menghadap Cover Depan)
             ctx.save();
             const spineCenterX = spineX + (spineW / 2);
-
-            // Spine Top Logo Placeholder
+            const coverH_mm = dim.coverH;
+            
+            // Pengaturan Font Global
             ctx.fillStyle = '#0f172a';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const baseFont = 'bold "Times New Roman", serif';
+
+            // Fungsi Helper untuk merotasi individu di posisinya
+            // Menggunakan Math.PI / 2 (90 derajat di Canvas) agar teks dibaca dari atas ke bawah
+            // dan bagian atas huruf menghadap ke kanan (Cover Depan)
+            const drawRotatedText = (text, posX, posY, fontSize) => {
+                ctx.save();
+                ctx.translate(posX, posY);
+                ctx.rotate(Math.PI / 2); 
+                ctx.font = `${fontSize}px ${baseFont}`;
+                ctx.fillText(text, 0, 0);
+                ctx.restore();
+            };
+
+            // 1. Logo (Paling atas)
+            const logoPosY = startY + mmToPx(coverH_mm * 0.07); 
             ctx.beginPath();
-            ctx.arc(spineCenterX, startY + mmToPx(15), Math.min(spineW / 2 - 2, 12), 0, Math.PI * 2);
+            ctx.arc(spineCenterX, logoPosY, Math.min(spineW / 2 - 2, 12), 0, Math.PI * 2);
             ctx.fill();
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 10px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('LOGO', spineCenterX, startY + mmToPx(15));
+            ctx.font = 'bold 10px "Times New Roman", serif';
+            ctx.fillText('LOGO', spineCenterX, logoPosY);
+            ctx.fillStyle = '#0f172a'; // Kembalikan warna text
 
-            // Rotate spine text so the glyph tops face the front cover on the right side.
-            ctx.translate(spineCenterX, startY + (coverH / 2));
-            ctx.rotate(Math.PI / 2); // Corel-facing 270° spine orientation
+            // 2. Kategori / Karya Tulis
+            drawRotatedText(dim.spineKat.toUpperCase(), spineCenterX, startY + mmToPx(coverH_mm * 0.18), 14);
 
-            const coverH_mm = dim.coverH;
-
-            // Kategori (Top section of spine)
-            ctx.fillStyle = '#0f172a';
-            ctx.font = 'bold 13px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(dim.spineKat.toUpperCase(), mmToPx(coverH_mm * 0.35), 0);
-
-            // Judul Utama (Upper-middle section)
-            ctx.font = 'bold 11px sans-serif';
+            // 3. Judul Utama
             const shortJudul = dim.spineJudul.length > 70 ? dim.spineJudul.substring(0, 67) + '...' : dim.spineJudul;
-            ctx.fillText(shortJudul.toUpperCase(), mmToPx(coverH_mm * 0.05), 0);
+            drawRotatedText(shortJudul.toUpperCase(), spineCenterX, startY + mmToPx(coverH_mm * 0.45), 12);
 
-            // Nama Penulis (Lower-middle section)
-            ctx.font = '10px sans-serif';
+            // 4. Nama Penulis
             const linesPenulis = dim.spinePenulis.split('\n');
-            ctx.fillText(linesPenulis[0] || '', mmToPx(-coverH_mm * 0.25), -6);
-            if (linesPenulis[1]) ctx.fillText(linesPenulis[1], mmToPx(-coverH_mm * 0.25), 6);
+            if (linesPenulis[0]) {
+                drawRotatedText(linesPenulis[0], spineCenterX, startY + mmToPx(coverH_mm * 0.75) - 6, 11);
+            }
+            if (linesPenulis[1]) {
+                drawRotatedText(linesPenulis[1], spineCenterX, startY + mmToPx(coverH_mm * 0.75) + 6, 11);
+            }
 
-            // Tahun (Bottom section)
-            ctx.font = 'bold 13px sans-serif';
-            ctx.fillText(dim.spineTahun, mmToPx(-coverH_mm * 0.42), 0);
+            // 5. Tahun (Paling bawah)
+            drawRotatedText(dim.spineTahun, spineCenterX, startY + coverH - mmToPx(coverH_mm * 0.08), 14);
 
             ctx.restore();
 
@@ -805,8 +801,9 @@
                 imageTag = `<image xlink:href="${item.previewImg.src}" x="${coverX}" y="${dim.topMargin}" width="${dim.coverW}" height="${dim.coverH}" preserveAspectRatio="none"/>`;
             }
 
-            const textAt = (x, y, text, size, weight = 'normal', extra = '') =>
-                `<text x="${x}" y="${y}" font-family="Arial" font-size="${size}" font-weight="${weight}" text-anchor="middle" dominant-baseline="middle" ${extra}>${escapeHtml(text)}</text>`;
+            // Menggunakan transform rotate(90 x y) agar atas huruf menghadap kanan (cover depan)
+            const textAtRotated = (x, y, text, size) =>
+                `<text x="${x}" y="${y}" font-family="'Times New Roman', Times, serif" font-size="${size}" font-weight="bold" font-style="italic" text-anchor="middle" dominant-baseline="middle" transform="rotate(90, ${x}, ${y})">${escapeHtml(text)}</text>`;
 
             return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="${A3PlusW}mm" height="${A3PlusH}mm" viewBox="0 0 ${A3PlusW} ${A3PlusH}">
@@ -816,11 +813,16 @@
     ${imageTag}
     <rect x="${coverX}" y="${dim.topMargin}" width="${dim.coverW}" height="${dim.coverH}" fill="none" stroke="#000000" stroke-width="0.3"/>
 
-    <g transform="translate(${spineCenterX} ${spineCenterY}) rotate(90)">
-        ${textAt(dim.coverH * 0.35, 0, String(meta.kategori || '').toUpperCase(), 4.5, 'bold')}
-        ${textAt(dim.coverH * 0.05, 0, String(meta.judul || '').replace(/\n/g, ' ').toUpperCase(), 3.8, 'bold')}
-        ${penulisLines.map((line, i) => textAt(-dim.coverH * 0.25, (i - ((penulisLines.length - 1) / 2)) * 4, line, 3.4)).join('\n        ')}
-        ${textAt(-dim.coverH * 0.42, 0, String(meta.tahun || ''), 4.5, 'bold')}
+    <g>
+        <!-- Logo SVG -->
+        <circle cx="${spineCenterX}" cy="${dim.topMargin + (dim.coverH * 0.07)}" r="${Math.min(dim.spineW/2 - 1, 4)}" fill="#0f172a" />
+        <text x="${spineCenterX}" y="${dim.topMargin + (dim.coverH * 0.07)}" font-family="'Times New Roman', Times, serif" font-size="3" font-weight="bold" font-style="italic" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">LOGO</text>
+        
+        <!-- Urutan Teks dengan Rotasi 90 Derajat (Atas huruf menghadap cover depan) -->
+        ${textAtRotated(spineCenterX, dim.topMargin + (dim.coverH * 0.18), String(meta.kategori || '').toUpperCase(), 4.5)}
+        ${textAtRotated(spineCenterX, dim.topMargin + (dim.coverH * 0.45), String(meta.judul || '').replace(/\n/g, ' ').toUpperCase(), 3.8)}
+        ${penulisLines.map((line, i) => textAtRotated(spineCenterX, dim.topMargin + (dim.coverH * 0.75) + ((i - ((penulisLines.length - 1) / 2)) * 4), line, 3.4)).join('\n        ')}
+        ${textAtRotated(spineCenterX, dim.topMargin + dim.coverH - (dim.coverH * 0.08), String(meta.tahun || ''), 4.5)}
     </g>
 </svg>`;
         }
@@ -849,7 +851,7 @@
 
         function copyVBACode() {
             const dim = getDimensions();
-            const vbaScript = `' CorelDRAW X7 - Auto Multi-PDF Hardcover Macro (Spine 270 Degrees)
+            const vbaScript = `' CorelDRAW X7 - Auto Multi-PDF Hardcover Macro (Rotasi 270 Derajat Menghadap Cover Depan)
 Sub BatchGenerateHardcoverWithAuthorName()
     Dim doc As Document: Set doc = CreateDocument()
     doc.Unit = cdrMillimeter
@@ -869,12 +871,12 @@ Sub BatchGenerateHardcoverWithAuthorName()
     ActiveLayer.CreateLineSegment leftM + spineW + gapW, startY, leftM + spineW + gapW, startY - coverH
     ActiveLayer.CreateRectangle leftM + spineW + gapW, startY, leftM + spineW + gapW + coverW, startY - coverH
 
-    ' Rotasi Text Punggung Tepat 270 Derajat
+    ' Rotasi Text Punggung 270 Derajat Menghadap Cover Depan & Font Times New Roman Bold Italic (cdrTrue=1)
     Dim txtKat As Shape, txtJudul As Shape, txtPenulis As Shape, txtTahun As Shape
-    Set txtKat = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.15), "${dim.spineKat}", , , "Arial", 10): txtKat.Text.Angle = 270
-    Set txtJudul = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.45), "${dim.spineJudul.replace(/\n/g, ' ')}", , , "Arial", 9): txtJudul.Text.Angle = 270
-    Set txtPenulis = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.75), "${dim.spinePenulis.replace(/\n/g, ' ')}", , , "Arial", 8): txtPenulis.Text.Angle = 270
-    Set txtTahun = ActiveLayer.CreateArtisticText(spineCenterX, startY - coverH + 12, "${dim.spineTahun}", , , "Arial", 10): txtTahun.Text.Angle = 270
+    Set txtKat = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.18), "${dim.spineKat}", , , "Times New Roman", 10, cdrTrue, cdrTrue): txtKat.Text.Angle = 270
+    Set txtJudul = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.45), "${dim.spineJudul.replace(/\n/g, ' ')}", , , "Times New Roman", 9, cdrTrue, cdrTrue): txtJudul.Text.Angle = 270
+    Set txtPenulis = ActiveLayer.CreateArtisticText(spineCenterX, startY - (coverH * 0.75), "${dim.spinePenulis.replace(/\n/g, ' ')}", , , "Times New Roman", 8, cdrTrue, cdrTrue): txtPenulis.Text.Angle = 270
+    Set txtTahun = ActiveLayer.CreateArtisticText(spineCenterX, startY - coverH + 12, "${dim.spineTahun}", , , "Times New Roman", 10, cdrTrue, cdrTrue): txtTahun.Text.Angle = 270
 End Sub`;
 
             const textarea = document.createElement('textarea');
@@ -888,7 +890,7 @@ End Sub`;
 
         function copyPythonCode() {
             const dim = getDimensions();
-            const pythonScript = `# AutoCover Studio X7 - Python Batch Automation (Spine Rotated 270°)
+            const pythonScript = `# AutoCover Studio X7 - Python Batch Automation (Rotasi 270 Derajat Menghadap Cover Depan)
 import win32com.client
 
 corel = win32com.client.Dispatch("CorelDRAW.Application.17")
@@ -912,17 +914,17 @@ layer = doc.Pages(1).ActiveLayer
 layer.CreateRectangle(left_m, start_y, left_m + spine_w, start_y - cover_h)
 layer.CreateLineSegment(left_m + spine_w + gap_w, start_y, left_m + spine_w + gap_w, start_y - cover_h)
 
-# Rotasi Text Punggung Tepat 270 Derajat
-kat_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.15), "${dim.spineKat}", 0, 0, "Arial", 10)
+# Rotasi Text Punggung 270 Derajat Menghadap Cover Depan & Times New Roman Bold Italic (1=Bold, 1=Italic)
+kat_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.18), "${dim.spineKat}", 0, 0, "Times New Roman", 10, 1, 1)
 kat_txt.Text.Angle = 270.0
 
-judul_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.45), "${dim.spineJudul.replace(/\n/g, ' ')}", 0, 0, "Arial", 9)
+judul_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.45), "${dim.spineJudul.replace(/\n/g, ' ')}", 0, 0, "Times New Roman", 9, 1, 1)
 judul_txt.Text.Angle = 270.0
 
-id_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.75), "${dim.spinePenulis.replace(/\n/g, ' ')}", 0, 0, "Arial", 8)
+id_txt = layer.CreateArtisticText(spine_center_x, start_y - (cover_h * 0.75), "${dim.spinePenulis.replace(/\n/g, ' ')}", 0, 0, "Times New Roman", 8, 1, 1)
 id_txt.Text.Angle = 270.0
 
-thn_txt = layer.CreateArtisticText(spine_center_x, start_y - cover_h + 12.0, "${dim.spineTahun}", 0, 0, "Arial", 10)
+thn_txt = layer.CreateArtisticText(spine_center_x, start_y - cover_h + 12.0, "${dim.spineTahun}", 0, 0, "Times New Roman", 10, 1, 1)
 thn_txt.Text.Angle = 270.0`;
 
             const textarea = document.createElement('textarea');

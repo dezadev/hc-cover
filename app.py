@@ -134,6 +134,8 @@ class AutoCoverEngine:
                 data["kategori"] = "DISERTASI"
             elif re.search(r'LAPORAN', text, re.I):
                 data["kategori"] = "LAPORAN TUGAS AKHIR"
+            elif re.search(r'PUBLIKASI ILMIAH', text, re.I):
+                data["kategori"] = "PUBLIKASI ILMIAH"
             else:
                 data["kategori"] = "SKRIPSI"
 
@@ -146,7 +148,7 @@ class AutoCoverEngine:
                     if i + 2 < len(lines) and (re.search(r'\d+', lines[i + 2]) or re.search(r'NIM|NPM|PROGRAM|ILMU', lines[i + 2], re.I)):
                         found_penulis.append(lines[i + 2])
                     break
-                elif re.search(r'\b(NIM|NPM)\b', l, re.I) or re.match(r'^\d{8,12}$', l):
+                elif re.search(r'\b(NIM|NPM|Nim)\b', l, re.I) or re.match(r'^\d{8,12}$', l):
                     if i > 0 and lines[i - 1] not in found_penulis:
                         found_penulis.insert(0, lines[i - 1])
                     found_penulis.append(l)
@@ -163,7 +165,7 @@ class AutoCoverEngine:
             for l in lines:
                 u = l.upper()
                 if (len(l) > 3 and 
-                    not any(kw in u for kw in ["SKRIPSI", "TESIS", "DISERTASI", "UNIVERSITAS", "FAKULTAS", "PROGRAM", "DISUSUN", "OLEH", "NIM", "NPM"]) and
+                    not any(kw in u for kw in ["SKRIPSI", "TESIS", "DISERTASI", "UNIVERSITAS", "FAKULTAS", "PROGRAM", "DISUSUN", "OLEH", "NIM", "NPM", "PUBLIKASI ILMIAH"]) and
                     not re.search(r'\b20\d{2}\b', u)):
                     title_candidates.append(l)
 
