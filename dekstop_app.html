@@ -36,7 +36,7 @@
                     AutoCover Studio X7
                     <span class="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">Lossless Export & Rotasi 270°</span>
                 </h1>
-                <p class="text-xs text-slate-400">Punggung Rotasi 270° | Auto-Parsing Judul PDF | Ekspor SVG Embed Gambar & PNG Lossless</p>
+                <p class="text-xs text-slate-400">Punggung menghadap cover utama | Auto-Parsing Judul/Penulis/Tahun PDF | Ekspor SVG CorelDRAW</p>
             </div>
         </div>
 
@@ -254,24 +254,56 @@
             renderCanvas();
         }
 
-        function getDimensions() {
-            const coverW = parseFloat(document.getElementById('coverWidthInput').value) || 182;
-            const coverH = parseFloat(document.getElementById('coverHeightInput').value) || 257;
-            const spineW = parseFloat(document.getElementById('spineWidthInput').value) || 12;
-            const gapW = parseFloat(document.getElementById('gapWidthInput').value) || 5;
+        function calculateDimensions(coverW, coverH, spineW, gapW, spineKat, spineJudul, spinePenulis, spineTahun, updateSummary = false) {
+            const totalLayoutW = spineW + gapW + coverW;
+            const leftMargin = (A3PlusW - totalLayoutW) / 2;
+            const topMargin = (A3PlusH - coverH) / 2;
 
+            if (updateSummary) {
+                document.getElementById('totalWidthSummary').innerText = `${totalLayoutW.toFixed(1)} mm`;
+            }
+
+            return { coverW, coverH, spineW, gapW, spineKat, spineJudul, spinePenulis, spineTahun, totalLayoutW, leftMargin, topMargin };
+        }
+
+        function getCurrentLayoutInputs() {
+            return {
+                coverW: parseFloat(document.getElementById('coverWidthInput').value) || 182,
+                coverH: parseFloat(document.getElementById('coverHeightInput').value) || 257,
+                spineW: parseFloat(document.getElementById('spineWidthInput').value) || 12,
+                gapW: parseFloat(document.getElementById('gapWidthInput').value) || 5
+            };
+        }
+
+        function getDimensions() {
+            const layout = getCurrentLayoutInputs();
             const spineKat = document.getElementById('spineKatInput').value || 'SKRIPSI';
             const spineJudul = document.getElementById('spineJudulInput').value || 'JUDUL SKRIPSI';
             const spinePenulis = document.getElementById('spinePenulisInput').value || 'NAMA PENULIS';
             const spineTahun = document.getElementById('spineTahunInput').value || '2026';
 
-            const totalLayoutW = spineW + gapW + coverW;
-            const leftMargin = (A3PlusW - totalLayoutW) / 2;
-            const topMargin = (A3PlusH - coverH) / 2;
+            return calculateDimensions(layout.coverW, layout.coverH, layout.spineW, layout.gapW, spineKat, spineJudul, spinePenulis, spineTahun, true);
+        }
 
-            document.getElementById('totalWidthSummary').innerText = `${totalLayoutW.toFixed(1)} mm`;
+        function getDimensionsForIndex(index) {
+            const item = pdfBatch[index];
+            const layout = item?.layout || getCurrentLayoutInputs();
+            const meta = item?.metadata || {
+                kategori: document.getElementById('spineKatInput').value || 'SKRIPSI',
+                judul: document.getElementById('spineJudulInput').value || 'JUDUL SKRIPSI',
+                penulis: document.getElementById('spinePenulisInput').value || 'NAMA PENULIS',
+                tahun: document.getElementById('spineTahunInput').value || '2026'
+            };
 
-            return { coverW, coverH, spineW, gapW, spineKat, spineJudul, spinePenulis, spineTahun, totalLayoutW, leftMargin, topMargin };
+            return calculateDimensions(layout.coverW, layout.coverH, layout.spineW, layout.gapW, meta.kategori, meta.judul, meta.penulis, meta.tahun);
+        }
+
+        function applyLayoutToInputs(layout) {
+            if (!layout) return;
+            document.getElementById('coverWidthInput').value = layout.coverW;
+            document.getElementById('coverHeightInput').value = layout.coverH;
+            document.getElementById('spineWidthInput').value = layout.spineW;
+            document.getElementById('gapWidthInput').value = layout.gapW;
         }
 
         function saveCurrentInputs() {
@@ -283,6 +315,7 @@
                 penulis: document.getElementById('spinePenulisInput').value.trim() || 'NAMA PENULIS',
                 tahun: document.getElementById('spineTahunInput').value.trim() || '2026'
             };
+            pdfBatch[currentSheetIndex].layout = getCurrentLayoutInputs();
         }
 
         function renderCanvas() {
@@ -359,9 +392,9 @@
             ctx.textBaseline = 'middle';
             ctx.fillText('LOGO', spineCenterX, startY + mmToPx(15));
 
-            // ROTATE 270 DEGREES (Counter-clockwise -Math.PI / 2)
+            // Rotate spine text so the glyph tops face the front cover on the right side.
             ctx.translate(spineCenterX, startY + (coverH / 2));
-            ctx.rotate(-Math.PI / 2); // 270 Degrees Rotation
+            ctx.rotate(Math.PI / 2); // Corel-facing 270° spine orientation
 
             const coverH_mm = dim.coverH;
 
@@ -458,10 +491,38 @@
                 if (lines.length === 0) return metadata;
 
                 const fullText = lines.join(' ');
+                const cleanLine = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+                const isIgnorableAuthorLine = (value) => {
+                    const u = cleanLine(value).toUpperCase();
+                    return !u || /^(NAMA|NAME|PENULIS|AUTHOR|MAHASISWA|STUDENT|BY|OLEH|DISUSUN OLEH|SUBMITTED BY|ARRANGED BY)\s*:?$/.test(u);
+                };
+                const isLikelyPersonName = (value) => {
+                    const u = cleanLine(value).toUpperCase();
+                    return u.length >= 4 &&
+                        /^[A-Z .,'`-]+$/.test(u) &&
+                        !/SKRIPSI|TESIS|DISERTASI|LAPORAN|UNIVERSITAS|FAKULTAS|PROGRAM|STUDI|PRODI|JURUSAN|DEPARTMENT|MINISTRY|SCHOOL|COLLEGE/.test(u) &&
+                        !/\b20\d{2}\b|\d{5,}/.test(u);
+                };
+                const normalizeNimLine = (value) => {
+                    const line = cleanLine(value);
+                    const nimMatch = line.match(/\b(NIM|NPM|NIDN|ID)\b\s*[:.\-]?\s*([A-Z0-9.\-/ ]{5,})/i);
+                    if (nimMatch) return `${nimMatch[1].toUpperCase()}: ${nimMatch[2].trim()}`;
+                    const numberMatch = line.match(/\b\d{6,16}\b/);
+                    return numberMatch ? `NIM: ${numberMatch[0]}` : '';
+                };
+                const findNearbyProgramLine = (startIndex) => {
+                    const found = lines.slice(Math.max(0, startIndex), Math.min(lines.length, startIndex + 12))
+                        .find(row => /PROGRAM\s+STUDI|PRODI|STUDY\s+PROGRAM|DEPARTMENT\s+OF/i.test(row));
+                    return found ? cleanLine(found) : '';
+                };
 
-                // 1. Detect Year
-                const yearMatch = fullText.match(/\b(20\d{2})\b/);
-                if (yearMatch) metadata.tahun = yearMatch[1];
+                // 1. Detect Year (prefer graduation/publish year near bottom; avoid ID/NIM numbers)
+                const yearCandidates = lines
+                    .map((line) => ({ line, match: cleanLine(line).match(/\b(19|20)\d{2}\b/g) }))
+                    .filter(item => item.match && !/NIM|NPM|ID|NO\.?|TELP|PHONE/i.test(item.line));
+                if (yearCandidates.length > 0) {
+                    metadata.tahun = yearCandidates[yearCandidates.length - 1].match.slice(-1)[0];
+                }
 
                 // 2. Detect Category
                 if (/TESIS/i.test(fullText)) metadata.kategori = 'TESIS';
@@ -469,23 +530,42 @@
                 else if (/LAPORAN/i.test(fullText)) metadata.kategori = 'LAPORAN TUGAS AKHIR';
                 else metadata.kategori = 'SKRIPSI';
 
-                // 3. Detect Author & NIM/NPM
+                // 3. Detect Author, NIM/NPM, and Program Studi from common cover layouts
                 let foundPenulis = [];
                 for (let i = 0; i < lines.length; i++) {
-                    const l = lines[i];
-                    if (/DISUSUN OLEH|OLEH\s*:/i.test(l)) {
-                        if (lines[i+1]) foundPenulis.push(lines[i+1].trim());
-                        if (lines[i+2] && (/\d+/.test(lines[i+2]) || /NIM|NPM|PROGRAM|ILMU/i.test(lines[i+2]))) {
-                            foundPenulis.push(lines[i+2].trim());
-                        }
-                        const programLine = lines.slice(i + 1, i + 8).find(row => /PROGRAM\s+STUDI|PRODI/i.test(row));
-                        if (programLine && !foundPenulis.includes(programLine.trim())) foundPenulis.push(programLine.trim());
+                    const l = cleanLine(lines[i]);
+                    if (/DISUSUN\s+OLEH|DIAJUKAN\s+OLEH|OLEH\s*:|SUBMITTED\s+BY|ARRANGED\s+BY|AUTHOR\s*:/i.test(l)) {
+                        const nearby = lines.slice(i + 1, i + 10).map(cleanLine).filter(Boolean);
+                        const nameLine = nearby.find(row => !isIgnorableAuthorLine(row) && isLikelyPersonName(row));
+                        const nimLine = nearby.map(normalizeNimLine).find(Boolean);
+                        const programLine = findNearbyProgramLine(i + 1);
+                        if (nameLine) foundPenulis.push(nameLine);
+                        if (nimLine) foundPenulis.push(nimLine);
+                        if (programLine && !foundPenulis.includes(programLine)) foundPenulis.push(programLine);
                         break;
-                    } else if (/\b(NIM|NPM)\b/i.test(l) || /^\d{8,12}$/.test(l)) {
-                        if (i > 0 && !foundPenulis.includes(lines[i-1])) foundPenulis.unshift(lines[i-1].trim());
-                        foundPenulis.push(l.trim());
-                        const programLine = lines.slice(i + 1, i + 8).find(row => /PROGRAM\s+STUDI|PRODI/i.test(row));
-                        if (programLine && !foundPenulis.includes(programLine.trim())) foundPenulis.push(programLine.trim());
+                    }
+
+                    const nimLine = normalizeNimLine(l);
+                    if (nimLine) {
+                        const before = lines.slice(Math.max(0, i - 5), i).map(cleanLine).reverse();
+                        const after = lines.slice(i + 1, i + 6).map(cleanLine);
+                        const nameLine = [...before, ...after].find(row => !isIgnorableAuthorLine(row) && isLikelyPersonName(row));
+                        const programLine = findNearbyProgramLine(i + 1) || findNearbyProgramLine(Math.max(0, i - 3));
+                        if (nameLine) foundPenulis.push(nameLine);
+                        foundPenulis.push(nimLine);
+                        if (programLine && !foundPenulis.includes(programLine)) foundPenulis.push(programLine);
+                        break;
+                    }
+
+                    if (/^NAMA\s*(PENULIS|MAHASISWA)?\s*[:.\-]/i.test(l) || /^NAME\s*[:.\-]/i.test(l)) {
+                        const inlineName = l.replace(/^NAMA\s*(PENULIS|MAHASISWA)?\s*[:.\-]\s*/i, '').replace(/^NAME\s*[:.\-]\s*/i, '').trim();
+                        const nextName = lines.slice(i + 1, i + 5).map(cleanLine).find(row => !isIgnorableAuthorLine(row) && isLikelyPersonName(row));
+                        const nameLine = isLikelyPersonName(inlineName) ? inlineName : nextName;
+                        const nimLine = lines.slice(i, i + 8).map(normalizeNimLine).find(Boolean);
+                        const programLine = findNearbyProgramLine(i);
+                        if (nameLine) foundPenulis.push(nameLine);
+                        if (nimLine) foundPenulis.push(nimLine);
+                        if (programLine && !foundPenulis.includes(programLine)) foundPenulis.push(programLine);
                         break;
                     }
                 }
@@ -498,6 +578,7 @@
                 const titleLines = lines.filter(l => {
                     const u = l.toUpperCase();
                     return l.length > 3 &&
+                        !foundPenulis.some(row => cleanLine(row).toUpperCase() === u) &&
                         !u.includes('SKRIPSI') && !u.includes('TESIS') && !u.includes('DISERTASI') &&
                         !u.includes('UNIVERSITAS') && !u.includes('FAKULTAS') && !u.includes('PROGRAM STUDI') &&
                         !u.includes('DISUSUN OLEH') && !u.includes('OLEH') && !u.includes('NIM') && !u.includes('NPM') &&
@@ -550,7 +631,8 @@
                         name: file.name,
                         file: file,
                         previewImg: img,
-                        metadata: extractedMeta
+                        metadata: extractedMeta,
+                        layout: getCurrentLayoutInputs()
                     };
 
                     pdfBatch.push(fileObj);
@@ -600,6 +682,7 @@
             
             if (pdfBatch[index] && pdfBatch[index].metadata) {
                 const meta = pdfBatch[index].metadata;
+                applyLayoutToInputs(pdfBatch[index].layout);
                 document.getElementById('spineKatInput').value = meta.kategori;
                 document.getElementById('spineJudulInput').value = meta.judul;
                 document.getElementById('spinePenulisInput').value = meta.penulis;
@@ -699,9 +782,10 @@
         }
 
         function generateSVGContentForIndex(index) {
-            const dim = getDimensions();
+            saveCurrentInputs();
+            const dim = getDimensionsForIndex(index);
             const item = pdfBatch[index];
-            const meta = item ? item.metadata : {
+            const meta = {
                 kategori: dim.spineKat,
                 judul: dim.spineJudul,
                 penulis: dim.spinePenulis,
@@ -732,7 +816,7 @@
     ${imageTag}
     <rect x="${coverX}" y="${dim.topMargin}" width="${dim.coverW}" height="${dim.coverH}" fill="none" stroke="#000000" stroke-width="0.3"/>
 
-    <g transform="translate(${spineCenterX} ${spineCenterY}) rotate(270)">
+    <g transform="translate(${spineCenterX} ${spineCenterY}) rotate(90)">
         ${textAt(dim.coverH * 0.35, 0, String(meta.kategori || '').toUpperCase(), 4.5, 'bold')}
         ${textAt(dim.coverH * 0.05, 0, String(meta.judul || '').replace(/\n/g, ' ').toUpperCase(), 3.8, 'bold')}
         ${penulisLines.map((line, i) => textAt(-dim.coverH * 0.25, (i - ((penulisLines.length - 1) / 2)) * 4, line, 3.4)).join('\n        ')}
