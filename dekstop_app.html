@@ -42,11 +42,8 @@
 
         <!-- Action Header Buttons -->
         <div class="flex items-center gap-2">
-            <button id="btnExportPNGLayout" onclick="exportPNGLayout()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
-                <i class="fa-solid fa-image"></i> Export PNG Cetak (Lossless)
-            </button>
             <button id="btnExportBatchSVG" onclick="exportBatchSVG()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
-                <i class="fa-solid fa-file-code"></i> Export SVG (Embed Cover)
+                <i class="fa-solid fa-file-code"></i> Export SVG CorelDRAW
             </button>
             <button id="btnExportCSV" onclick="exportCSVData()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1.5 shadow-sm">
                 <i class="fa-solid fa-file-csv text-amber-400"></i> CSV Print Merge
@@ -217,6 +214,7 @@
         let pdfBatch = [];
         let currentSheetIndex = 0;
         let zoomLevel = 1.0;
+        let sheetInputsLoaded = false;
 
         // Dimensions (in mm)
         const A3PlusW = 297.0;
@@ -277,14 +275,14 @@
         }
 
         function saveCurrentInputs() {
-            if (pdfBatch[currentSheetIndex]) {
-                pdfBatch[currentSheetIndex].metadata = {
-                    kategori: document.getElementById('spineKatInput').value,
-                    judul: document.getElementById('spineJudulInput').value,
-                    penulis: document.getElementById('spinePenulisInput').value,
-                    tahun: document.getElementById('spineTahunInput').value
-                };
-            }
+            if (!sheetInputsLoaded || !pdfBatch[currentSheetIndex]) return;
+
+            pdfBatch[currentSheetIndex].metadata = {
+                kategori: document.getElementById('spineKatInput').value.trim() || 'SKRIPSI',
+                judul: document.getElementById('spineJudulInput').value.trim() || 'JUDUL SKRIPSI',
+                penulis: document.getElementById('spinePenulisInput').value.trim() || 'NAMA PENULIS',
+                tahun: document.getElementById('spineTahunInput').value.trim() || '2026'
+            };
         }
 
         function renderCanvas() {
@@ -480,10 +478,14 @@
                         if (lines[i+2] && (/\d+/.test(lines[i+2]) || /NIM|NPM|PROGRAM|ILMU/i.test(lines[i+2]))) {
                             foundPenulis.push(lines[i+2].trim());
                         }
+                        const programLine = lines.slice(i + 1, i + 8).find(row => /PROGRAM\s+STUDI|PRODI/i.test(row));
+                        if (programLine && !foundPenulis.includes(programLine.trim())) foundPenulis.push(programLine.trim());
                         break;
                     } else if (/\b(NIM|NPM)\b/i.test(l) || /^\d{8,12}$/.test(l)) {
                         if (i > 0 && !foundPenulis.includes(lines[i-1])) foundPenulis.unshift(lines[i-1].trim());
                         foundPenulis.push(l.trim());
+                        const programLine = lines.slice(i + 1, i + 8).find(row => /PROGRAM\s+STUDI|PRODI/i.test(row));
+                        if (programLine && !foundPenulis.includes(programLine.trim())) foundPenulis.push(programLine.trim());
                         break;
                     }
                 }
@@ -520,6 +522,7 @@
             const queueContainer = document.getElementById('fileQueue');
             queueContainer.innerHTML = '';
             pdfBatch = [];
+            sheetInputsLoaded = false;
 
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
@@ -601,6 +604,7 @@
                 document.getElementById('spineJudulInput').value = meta.judul;
                 document.getElementById('spinePenulisInput').value = meta.penulis;
                 document.getElementById('spineTahunInput').value = meta.tahun;
+                sheetInputsLoaded = true;
             }
 
             renderSheetTabs();
@@ -704,35 +708,36 @@
                 tahun: dim.spineTahun
             };
 
-            const spineCenterX = dim.leftMargin + (dim.spineW / 2);
-            const coverX = dim.leftMargin + dim.spineW + dim.gapW;
+            const spineX = dim.leftMargin;
+            const gapX = dim.leftMargin + dim.spineW;
+            const coverX = gapX + dim.gapW;
+            const spineCenterX = spineX + (dim.spineW / 2);
+            const spineCenterY = dim.topMargin + (dim.coverH / 2);
+            const penulisLines = String(meta.penulis || '').split('\n').filter(Boolean);
 
-            // Embedded Front Cover Image (fixes blank cover issue on export)
-            let imageTag = '';
+            // SVG 1.1 + xlink improves compatibility with older CorelDRAW versions.
+            let imageTag = `<rect x="${coverX}" y="${dim.topMargin}" width="${dim.coverW}" height="${dim.coverH}" fill="#f8fafc"/>`;
             if (item && item.previewImg && item.previewImg.src) {
-                imageTag = `<image href="${item.previewImg.src}" x="${coverX}" y="${dim.topMargin}" width="${dim.coverW}" height="${dim.coverH}" preserveAspectRatio="none"/>`;
+                imageTag = `<image xlink:href="${item.previewImg.src}" x="${coverX}" y="${dim.topMargin}" width="${dim.coverW}" height="${dim.coverH}" preserveAspectRatio="none"/>`;
             }
 
-            return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${A3PlusW}mm" height="${A3PlusH}mm" viewBox="0 0 ${A3PlusW} ${A3PlusH}">
-    <!-- Background Paper A3+ -->
-    <rect x="0" y="0" width="${A3PlusW}" height="${A3PlusH}" fill="#ffffff" stroke="#cbd5e1" stroke-width="0.5"/>
-    
-    <!-- Spine Rect Box -->
-    <rect x="${dim.leftMargin}" y="${dim.topMargin}" width="${dim.spineW}" height="${dim.coverH}" fill="#ffffff" stroke="#000000" stroke-width="0.3"/>
-    
-    <!-- Spine Text Elements Rotated 270 Degrees -->
-    <text x="${spineCenterX}" y="${dim.topMargin + (dim.coverH * 0.15)}" font-family="Arial" font-size="3.5" font-weight="bold" text-anchor="middle" transform="rotate(270, ${spineCenterX}, ${dim.topMargin + (dim.coverH * 0.15)})">${escapeHtml(meta.kategori)}</text>
-    <text x="${spineCenterX}" y="${dim.topMargin + (dim.coverH * 0.45)}" font-family="Arial" font-size="3" font-weight="bold" text-anchor="middle" transform="rotate(270, ${spineCenterX}, ${dim.topMargin + (dim.coverH * 0.45)})">${escapeHtml(meta.judul.replace(/\n/g, ' '))}</text>
-    <text x="${spineCenterX}" y="${dim.topMargin + (dim.coverH * 0.75)}" font-family="Arial" font-size="2.5" text-anchor="middle" transform="rotate(270, ${spineCenterX}, ${dim.topMargin + (dim.coverH * 0.75)})">${escapeHtml(meta.penulis.replace(/\n/g, ' '))}</text>
-    <text x="${spineCenterX}" y="${dim.topMargin + dim.coverH - 15}" font-family="Arial" font-size="3.5" font-weight="bold" text-anchor="middle" transform="rotate(270, ${spineCenterX}, ${dim.topMargin + dim.coverH - 15})">${escapeHtml(meta.tahun)}</text>
-    
-    <!-- 5mm Gap Segment -->
-    <rect x="${dim.leftMargin + dim.spineW}" y="${dim.topMargin}" width="${dim.gapW}" height="${dim.coverH}" fill="#f1f5f9" stroke="#999999" stroke-width="0.2" stroke-dasharray="1,1"/>
+            const textAt = (x, y, text, size, weight = 'normal', extra = '') =>
+                `<text x="${x}" y="${y}" font-family="Arial" font-size="${size}" font-weight="${weight}" text-anchor="middle" dominant-baseline="middle" ${extra}>${escapeHtml(text)}</text>`;
 
-    <!-- Embedded Front Cover Image (Lossless PDF Render) -->
+            return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="${A3PlusW}mm" height="${A3PlusH}mm" viewBox="0 0 ${A3PlusW} ${A3PlusH}">
+    <rect x="0" y="0" width="${A3PlusW}" height="${A3PlusH}" fill="#ffffff" stroke="#cbd5e1" stroke-width="0.5"/>
+    <rect x="${spineX}" y="${dim.topMargin}" width="${dim.spineW}" height="${dim.coverH}" fill="#ffffff" stroke="#000000" stroke-width="0.3"/>
+    <rect x="${gapX}" y="${dim.topMargin}" width="${dim.gapW}" height="${dim.coverH}" fill="#f1f5f9" stroke="#999999" stroke-width="0.2" stroke-dasharray="1,1"/>
     ${imageTag}
     <rect x="${coverX}" y="${dim.topMargin}" width="${dim.coverW}" height="${dim.coverH}" fill="none" stroke="#000000" stroke-width="0.3"/>
+
+    <g transform="translate(${spineCenterX} ${spineCenterY}) rotate(270)">
+        ${textAt(dim.coverH * 0.35, 0, String(meta.kategori || '').toUpperCase(), 4.5, 'bold')}
+        ${textAt(dim.coverH * 0.05, 0, String(meta.judul || '').replace(/\n/g, ' ').toUpperCase(), 3.8, 'bold')}
+        ${penulisLines.map((line, i) => textAt(-dim.coverH * 0.25, (i - ((penulisLines.length - 1) / 2)) * 4, line, 3.4)).join('\n        ')}
+        ${textAt(-dim.coverH * 0.42, 0, String(meta.tahun || ''), 4.5, 'bold')}
+    </g>
 </svg>`;
         }
 
